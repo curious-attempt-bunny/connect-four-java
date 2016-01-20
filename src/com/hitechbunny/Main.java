@@ -6,7 +6,8 @@ import java.util.Random;
 
 public class Main {
 
-public static final int ROLLOUTS = Integer.parseInt(System.getProperty("rollouts", "10000"));
+    public static final int ROLLOUTS = Integer.parseInt(System.getProperty("rollouts", "10000"));
+    public static final boolean SELECTS_DEFENSIVE = Boolean.parseBoolean(System.getProperty("selects_defensive", "false"));
 
     public static double score_move(String state, int our_bot_id, int move) {
         int[][] grid = new int[9][8];
@@ -57,8 +58,11 @@ public static final int ROLLOUTS = Integer.parseInt(System.getProperty("rollouts
             while(true) {
                 int legals = 0;
                 boolean done = false;
+                Integer defensive_move = null;
+
                 for (int i = 1; i <= 7; i++) {
                     drop = getDrop(s[i]);
+//                    System.err.println("Considering "+i+" with drop "+drop);
                     if (drop != -1) {
                         legal[legals++] = i;
 
@@ -70,6 +74,8 @@ public static final int ROLLOUTS = Integer.parseInt(System.getProperty("rollouts
                             }
                             done = true;
                             break;
+                        } else if (winning_move(s, i, drop, 3-bot_id)) {
+                            defensive_move = i;
                         }
                     }
                 }
@@ -82,8 +88,16 @@ public static final int ROLLOUTS = Integer.parseInt(System.getProperty("rollouts
                     break;
                 }
 
-                move = legal[r.nextInt(legals)];
+                if (SELECTS_DEFENSIVE && defensive_move != null) {
+                    move = defensive_move;
+//                    System.err.println("Defensive move: "+move);
+                } else {
+                    move = legal[r.nextInt(legals)];
+//                    System.err.println("Normal move: "+move);
+                }
+
                 drop = getDrop(s[move]);
+//                System.err.println("Drop for "+move+": "+drop);
                 s[move][drop] = bot_id;
 
                 bot_id = 3-bot_id;
