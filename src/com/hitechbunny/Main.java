@@ -9,10 +9,15 @@ public class Main {
     public static final int ROLLOUTS = Integer.parseInt(System.getProperty("rollouts", "10000"));
     public static final boolean SELECTS_DEFENSIVE = Boolean.parseBoolean(System.getProperty("selects_defensive", "false"));
     public static final boolean SKIP_LOSSES = Boolean.parseBoolean(System.getProperty("skip_losses", "false"));
+    public static final boolean SKIP_REMOVE_WINS = Boolean.parseBoolean(System.getProperty("skip_remove_wins", "false"));
     public static final boolean USE_TIME_LIMIT = System.getProperty("time_limit") != null;
     public static final int TIME_LIMIT = Integer.parseInt(System.getProperty("time_limit", "450"));
 
-    public static double score_move(String state, int our_bot_id, int move, int rollouts) {
+    // bank = 10000 ; ratio = 0.2 ; moves = 25 ; portions = bank*((1-ratio)**moves) / moves ; 1.upto(moves) { |r| print "#{(portions + bank*ratio).to_i}," ; bank -= (bank*ratio).to_i; } ; puts
+    public static final int[] BONUS_TIMES = new int[] { 0,0,2001,1601,1281,1025,820,656,525,421,337,270,216,173,139,111,89,72,58,47,38,30,25,20,16,13,11 };
+    public static final boolean USE_BONUS_TIME = Boolean.parseBoolean(System.getProperty("use_bonus_time", "false"));
+
+    public static double score_move(String state, int our_bot_id, final int move, int rollouts) {
         int[][] grid = new int[9][8];
 
         int j = 1;
@@ -46,9 +51,13 @@ public class Main {
         }
 
         int[][] s = new int[9][8];
-        double sum = 0;
         int[] legal = new int[7];
+        int[] avoided = new int[7];
         Random r = new Random();
+
+        int wins = 0;
+        int losses = 0;
+        int draws = 0;
 
         for(int rollout = 0; rollout< rollouts; rollout++) {
             for (int i = 0; i < 9; i++) {
@@ -59,11 +68,13 @@ public class Main {
             int bot_id = 3-our_bot_id;
 
             while(true) {
-                plays++;
                 int legals = 0;
+                int avoideds = 0;
                 boolean done = false;
                 boolean skipped_losses = false;
                 Integer defensive_move = null;
+                Integer forcePlay = null;
+                Integer avoidPlay = null;
 
                 for (int i = 1; i <= 7; i++) {
                     drop = getDrop(s[i]);
@@ -74,9 +85,9 @@ public class Main {
                         if (winning_move(s, i, drop, bot_id)) {
                             // we win
                             if (our_bot_id == bot_id) {
-                                sum += 1;
+                                wins++;
                             } else {
-                                sum -= 1;
+                                losses++;
                             }
                             done = true;
                             break;
@@ -88,44 +99,72 @@ public class Main {
                             legals--;
                             skipped_losses = true;
 //                            System.err.println("Skipped loss at "+i);
+                        } else if (SKIP_REMOVE_WINS) {
+                            boolean canWinNext = (drop>1 && winning_move(s, i, drop-1, bot_id));
+                            boolean canWinAfter = (drop>2 && winning_move(s, i, drop-2, bot_id));
+
+                            if (canWinNext && canWinAfter) {
+                                forcePlay = i;
+                            } else if (canWinNext && !canWinAfter) {
+                                avoidPlay = i;
+                                avoided[avoideds++] = i;
+                                legals--;
+                            }
                         }
                     }
                 }
                 if (done) {
+                    // a winning move was available
                     break;
                 }
 
-                if (legals == 0 && skipped_losses) {
-                    if (our_bot_id == bot_id) {
-                        sum -= 1;
-                    } else {
-                        sum += 1;
-                    }
-                    break;
-                }
+                int selected;
 
-                if (legals == 0) {
-                    sum += 0; // draw
-                    break;
-                }
-
-                if (SELECTS_DEFENSIVE && defensive_move != null) {
-                    move = defensive_move;
-//                    System.err.println("Defensive move: "+move);
+                if (legals == 0 && avoidPlay != null) {
+                    // no moves we want to make, just moves that would eliminate a winning move for us
+                    selected = avoided[r.nextInt(avoideds)];;
                 } else {
-                    move = legal[r.nextInt(legals)];
-//                    System.err.println("Normal move: "+move);
+                    if (legals == 0 && skipped_losses) {
+                        // no moves we want to make, just ones that let them win next turn
+                        if (our_bot_id == bot_id) {
+                            losses++;
+                        } else {
+                            wins++;
+                        }
+                        done = true;
+                        break;
+                    }
+
+                    if (legals == 0) {
+                        // no moves at all to make
+                        draws++;
+                        break;
+                    }
+
+                    if (SELECTS_DEFENSIVE && defensive_move != null) {
+                        // a move to stop them from winning directly
+                        selected = defensive_move;
+                    } else if (forcePlay != null) {
+                        // a move that forces them to lose
+                        selected = forcePlay;
+                    } else {
+                        // just regular moves
+                        selected = legal[r.nextInt(legals)];
+                    }
                 }
 
-                drop = getDrop(s[move]);
-//                System.err.println("Drop for "+move+": "+drop);
-                s[move][drop] = bot_id;
+                drop = getDrop(s[selected]);
+                s[selected][drop] = bot_id;
 
                 bot_id = 3-bot_id;
             }
         }
 
-        return sum/ ROLLOUTS;
+        double sum = (double)(wins - losses)/rollouts;
+
+//        System.err.println("Move "+move+" sum: "+sum+" wins: "+wins+" losses "+losses+" draws "+draws);
+
+        return sum;
     }
 
     private static int getDrop(int[] ints) {
@@ -190,12 +229,51 @@ def valid_extent_dir(grid, i, j, di, dj)
 end
      */
 
-    public static int generate_move(String state, int our_bot_id) {
+    public static int generate_move(String state, int round, int our_bot_id) {
         int best_move = 1;
         double best_score = -100;
 
+        double[] scores = new double[8];
+
+        if (USE_TIME_LIMIT) {
+            long start = System.currentTimeMillis();
+            int move = 1;
+            int depth = 1;
+            final int CHUNK = 250;
+
+            int time_limit = TIME_LIMIT;
+            if (round <= BONUS_TIMES.length && USE_BONUS_TIME) {
+                time_limit += BONUS_TIMES[round-1];
+            }
+
+            boolean calculation = false;
+            while(System.currentTimeMillis() - start < time_limit) {
+                if (scores[move] != 1000 && scores[move] != -1000) { // && !(depth > 1 && (scores[move] == 1.0 || scores[move] == -1.0 || scores[move] == 0.0))) {
+                    double score = score_move(state, our_bot_id, move, CHUNK);
+                    scores[move] = ((depth - 1) * scores[move] + score) / depth;
+//                    System.err.print(".");
+//                    System.err.flush();
+                    calculation = true;
+                }
+                move++;
+                if (move == 8) {
+                    if (!calculation) {
+                        break;
+                    }
+                    move = 1;
+                    depth += 1;
+                    calculation = false;
+                }
+            }
+            System.err.println("Got to rollout "+(CHUNK*depth + (CHUNK*(move-1)))+" in "+(System.currentTimeMillis() - start));
+        } else {
+            for (int move = 1; move <= 7; move++) {
+                scores[move] = score_move(state, our_bot_id, move, ROLLOUTS);
+            }
+        }
+
         for(int move=1; move<=7; move++) {
-            double score = score_move(state, our_bot_id, move, ROLLOUTS);
+            double score = scores[move];
             System.err.print("Move "+move+" scores "+score);
             if (score > best_score) {
                 best_move = move;
@@ -214,6 +292,7 @@ end
 
         int our_bot_id = 1;
         String state = null;
+        int round = 0;
 
         while(true) {
             String line = in.readLine();
@@ -226,8 +305,9 @@ end
             } else if (line.startsWith("update game field ")) {
                 state = line.split(" ")[3];
             } else if (line.startsWith("action move ")) {
+                round++;
                 long start_time = System.currentTimeMillis();
-                int move = generate_move(state, our_bot_id);
+                int move = generate_move(state, round, our_bot_id);
                 System.out.println("place_disc "+(move-1));
                 System.err.println("Time: "+(System.currentTimeMillis()-start_time));
             }
