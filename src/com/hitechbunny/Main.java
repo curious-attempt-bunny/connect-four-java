@@ -8,8 +8,11 @@ public class Main {
 
     public static final int ROLLOUTS = Integer.parseInt(System.getProperty("rollouts", "10000"));
     public static final boolean SELECTS_DEFENSIVE = Boolean.parseBoolean(System.getProperty("selects_defensive", "false"));
+    public static final boolean SKIP_LOSSES = Boolean.parseBoolean(System.getProperty("skip_losses", "false"));
+    public static final boolean USE_TIME_LIMIT = System.getProperty("time_limit") != null;
+    public static final int TIME_LIMIT = Integer.parseInt(System.getProperty("time_limit", "450"));
 
-    public static double score_move(String state, int our_bot_id, int move) {
+    public static double score_move(String state, int our_bot_id, int move, int rollouts) {
         int[][] grid = new int[9][8];
 
         int j = 1;
@@ -47,7 +50,7 @@ public class Main {
         int[] legal = new int[7];
         Random r = new Random();
 
-        for(int rollout = 0; rollout< ROLLOUTS; rollout++) {
+        for(int rollout = 0; rollout< rollouts; rollout++) {
             for (int i = 0; i < 9; i++) {
                 for (j = 0; j < 8; j++) {
                     s[i][j] = grid[i][j];
@@ -56,8 +59,10 @@ public class Main {
             int bot_id = 3-our_bot_id;
 
             while(true) {
+                plays++;
                 int legals = 0;
                 boolean done = false;
+                boolean skipped_losses = false;
                 Integer defensive_move = null;
 
                 for (int i = 1; i <= 7; i++) {
@@ -67,6 +72,7 @@ public class Main {
                         legal[legals++] = i;
 
                         if (winning_move(s, i, drop, bot_id)) {
+                            // we win
                             if (our_bot_id == bot_id) {
                                 sum += 1;
                             } else {
@@ -75,11 +81,26 @@ public class Main {
                             done = true;
                             break;
                         } else if (winning_move(s, i, drop, 3-bot_id)) {
+                            // we block them winning
                             defensive_move = i;
+                        } else if (SKIP_LOSSES && drop>1 && winning_move(s, i, drop-1, 3-bot_id)) {
+                            // we avoid letting them win directly
+                            legals--;
+                            skipped_losses = true;
+//                            System.err.println("Skipped loss at "+i);
                         }
                     }
                 }
                 if (done) {
+                    break;
+                }
+
+                if (legals == 0 && skipped_losses) {
+                    if (our_bot_id == bot_id) {
+                        sum -= 1;
+                    } else {
+                        sum += 1;
+                    }
                     break;
                 }
 
@@ -174,7 +195,7 @@ end
         double best_score = -100;
 
         for(int move=1; move<=7; move++) {
-            double score = score_move(state, our_bot_id, move);
+            double score = score_move(state, our_bot_id, move, ROLLOUTS);
             System.err.print("Move "+move+" scores "+score);
             if (score > best_score) {
                 best_move = move;
