@@ -1,7 +1,8 @@
 package com.hitechbunny;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
+import java.io.*;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Random;
 
 public class Main {
@@ -16,29 +17,32 @@ public class Main {
     // bank = 10000 ; ratio = 0.2 ; moves = 25 ; portions = bank*((1-ratio)**moves) / moves ; 1.upto(moves) { |r| print "#{(portions + bank*ratio).to_i}," ; bank -= (bank*ratio).to_i; } ; puts
     public static final int[] BONUS_TIMES = new int[] { 0,0,2001,1601,1281,1025,820,656,525,421,337,270,216,173,139,111,89,72,58,47,38,30,25,20,16,13,11 };
     public static final boolean USE_BONUS_TIME = Boolean.parseBoolean(System.getProperty("use_bonus_time", "false"));
+    public static final boolean USE_TABLE = Boolean.parseBoolean(System.getProperty("use_table", "false"));
+    public static final boolean WRITE_TABLE = Boolean.parseBoolean(System.getProperty("write_table", "true"));
+
+    private static final Map<String, Rollout> table = new HashMap<>(1000000);
+
+    private static String key_for_move(String state, int our_bot_id, int move) {
+        int[][] grid = getGrid(state);
+        int drop = getDrop(grid[move]);
+        if (drop == -1) {
+            throw new RuntimeException("Illegal move!");
+        }
+        grid[move][drop] = our_bot_id;
+
+        StringBuffer key = new StringBuffer(7*6);
+        for (int j = 1; j <= 6; j++) {
+            for (int i = 1; i <= 7; i++) {
+                key.append(Integer.valueOf(grid[i][j]));
+            }
+        }
+
+        return key.toString();
+    }
 
     public static double score_move(String state, int our_bot_id, final int move, int rollouts) {
-        int[][] grid = new int[9][8];
-
-        int j = 1;
-        for(String row : state.split(";")) {
-            int i = 1;
-            for(String cell : row.split(",")) {
-                grid[i][j] = Integer.parseInt(cell);
-                i++;
-            }
-            j++;
-        }
-
-        for(int i = 0; i<9; i++) {
-            grid[i][0] = -1;
-            grid[i][7] = -1;
-        }
-
-        for(j = 0; j<6; j++) {
-            grid[0][j] = -1;
-            grid[8][j] = -1;
-        }
+        int[][] grid = getGrid(state);
+        int j;
 
         int drop = getDrop(grid[move]);
         if (drop == -1) {
@@ -167,6 +171,31 @@ public class Main {
         return sum;
     }
 
+    private static int[][] getGrid(String state) {
+        int[][] grid = new int[9][8];
+
+        int j = 1;
+        for(String row : state.split(";")) {
+            int i = 1;
+            for(String cell : row.split(",")) {
+                grid[i][j] = Integer.parseInt(cell);
+                i++;
+            }
+            j++;
+        }
+
+        for(int i = 0; i<9; i++) {
+            grid[i][0] = -1;
+            grid[i][7] = -1;
+        }
+
+        for(j = 0; j<6; j++) {
+            grid[0][j] = -1;
+            grid[8][j] = -1;
+        }
+        return grid;
+    }
+
     private static int getDrop(int[] ints) {
         int drop = -1;
         for(int j=1; j<=6; j++) {
@@ -229,7 +258,7 @@ def valid_extent_dir(grid, i, j, di, dj)
 end
      */
 
-    public static int generate_move(String state, int round, int our_bot_id) {
+    public static int generate_move(String state, int round, int our_bot_id) throws IOException {
         int best_move = 1;
         double best_score = -100;
 
@@ -247,13 +276,34 @@ end
             }
 
             boolean calculation = false;
+            int tableRollouts = 0;
             while(System.currentTimeMillis() - start < time_limit) {
                 if (scores[move] != 1000 && scores[move] != -1000) { // && !(depth > 1 && (scores[move] == 1.0 || scores[move] == -1.0 || scores[move] == 0.0))) {
                     double score = score_move(state, our_bot_id, move, CHUNK);
-                    scores[move] = ((depth - 1) * scores[move] + score) / depth;
+
 //                    System.err.print(".");
 //                    System.err.flush();
                     calculation = true;
+
+                    if (score != -1000 && score != 1000) {
+                        String key = key_for_move(state, our_bot_id, move);
+                        Rollout r = table.get(key);
+                        if (r == null) {
+                            r = new Rollout();
+                            table.put(key, r);
+                        }
+
+                        if (depth == 1) {
+                            r.evaluations++;
+                            tableRollouts += r.freq;
+                        }
+
+                        r.score = (r.score*r.freq + score*CHUNK) / (r.freq + CHUNK);
+                        r.freq += CHUNK;
+                        scores[move] = r.score;
+                    } else {
+                        scores[move] = score;
+                    }
                 }
                 move++;
                 if (move == 8) {
@@ -265,7 +315,7 @@ end
                     calculation = false;
                 }
             }
-            System.err.println("Got to rollout "+(CHUNK*depth + (CHUNK*(move-1)))+" in "+(System.currentTimeMillis() - start));
+            System.err.println("Got to rollout "+(CHUNK*depth + (CHUNK*(move-1)))+" (+"+tableRollouts+") in "+(System.currentTimeMillis() - start));
         } else {
             for (int move = 1; move <= 7; move++) {
                 scores[move] = score_move(state, our_bot_id, move, ROLLOUTS);
@@ -284,11 +334,21 @@ end
             }
         }
 
+        if (scores[best_move] == 1000 || scores[best_move] == 0 || scores[best_move] == -1 || scores[best_move] == 1.0) {
+            if (USE_TABLE && WRITE_TABLE) {
+                writeTable();
+            }
+        }
+
         return best_move;
     }
 
     public static void main(String[] args) throws Exception {
         BufferedReader in = new BufferedReader(new InputStreamReader(System.in));
+
+        if (USE_TABLE) {
+            readTable();
+        }
 
         int our_bot_id = 1;
         String state = null;
@@ -296,7 +356,7 @@ end
 
         while(true) {
             String line = in.readLine();
-            if (line == null) {
+            if (line == null || line.equals("end")) {
                 break;
             }
 
@@ -312,5 +372,44 @@ end
                 System.err.println("Time: "+(System.currentTimeMillis()-start_time));
             }
         }
+
+        if (USE_TABLE && WRITE_TABLE) {
+            writeTable();
+        }
+    }
+
+    private static void writeTable() throws IOException {
+        BufferedWriter f = new BufferedWriter(new FileWriter("/Users/home/IdeaProjects/connect-four-java/table.csv"));
+        for (Map.Entry<String, Rollout> entry : table.entrySet()) {
+            f.append(entry.getKey()+","+entry.getValue().freq+","+entry.getValue().score+","+entry.getValue().evaluations+"\n");
+        }
+        f.close();
+    }
+
+    private static void readTable() throws IOException {
+        try {
+            BufferedReader f = new BufferedReader(new FileReader("/Users/home/IdeaProjects/connect-four-java/table.csv"));
+            while (true) {
+                String line = f.readLine();
+                if (line == null) {
+                    break;
+                }
+                String[] parts = line.split(",");
+                Rollout r = new Rollout();
+                r.freq = Integer.parseInt(parts[1]);
+                r.score = Double.parseDouble(parts[2]);
+                r.evaluations = Integer.parseInt(parts[3]);
+                table.put(parts[0], r);
+            }
+            f.close();
+        } catch (FileNotFoundException e) {
+
+        }
+    }
+
+    private static class Rollout {
+        int freq;
+        double score;
+        int evaluations;
     }
 }
