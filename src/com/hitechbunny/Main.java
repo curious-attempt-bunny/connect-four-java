@@ -7,16 +7,8 @@ import java.util.Random;
 
 public class Main {
 
-    public static final int ROLLOUTS = Integer.parseInt(System.getProperty("rollouts", "10000"));
-    public static final boolean SELECTS_DEFENSIVE = Boolean.parseBoolean(System.getProperty("selects_defensive", "false"));
-    public static final boolean SKIP_LOSSES = Boolean.parseBoolean(System.getProperty("skip_losses", "false"));
-    public static final boolean SKIP_REMOVE_WINS = Boolean.parseBoolean(System.getProperty("skip_remove_wins", "false"));
-    public static final boolean USE_TIME_LIMIT = System.getProperty("time_limit") != null;
-    public static final int TIME_LIMIT = Integer.parseInt(System.getProperty("time_limit", "450"));
-
     // bank = 10000 ; ratio = 0.2 ; moves = 25 ; portions = bank*((1-ratio)**moves) / moves ; 1.upto(moves) { |r| print "#{(portions + bank*ratio).to_i}," ; bank -= (bank*ratio).to_i; } ; puts
     public static final int[] BONUS_TIMES = new int[] { 0,0,2001,1601,1281,1025,820,656,525,421,337,270,216,173,139,111,89,72,58,47,38,30,25,20,16,13,11 };
-    public static final boolean USE_BONUS_TIME = Boolean.parseBoolean(System.getProperty("use_bonus_time", "false"));
     public static final boolean USE_TABLE = Boolean.parseBoolean(System.getProperty("use_table", "false"));
     public static final boolean WRITE_TABLE = Boolean.parseBoolean(System.getProperty("write_table", "true"));
 
@@ -98,12 +90,12 @@ public class Main {
                         } else if (winning_move(s, i, drop, 3-bot_id)) {
                             // we block them winning
                             defensive_move = i;
-                        } else if (SKIP_LOSSES && drop>1 && winning_move(s, i, drop-1, 3-bot_id)) {
+                        } else if (drop>1 && winning_move(s, i, drop-1, 3-bot_id)) {
                             // we avoid letting them win directly
                             legals--;
                             skipped_losses = true;
 //                            System.err.println("Skipped loss at "+i);
-                        } else if (SKIP_REMOVE_WINS) {
+                        } else {
                             boolean canWinNext = (drop>1 && winning_move(s, i, drop-1, bot_id));
                             boolean canWinAfter = (drop>2 && winning_move(s, i, drop-2, bot_id));
 
@@ -145,7 +137,7 @@ public class Main {
                         break;
                     }
 
-                    if (SELECTS_DEFENSIVE && defensive_move != null) {
+                    if (defensive_move != null) {
                         // a move to stop them from winning directly
                         selected = defensive_move;
                     } else if (forcePlay != null) {
@@ -264,14 +256,14 @@ end
 
         double[] scores = new double[8];
 
-        if (USE_TIME_LIMIT) {
+        if (true) {
             long start = System.currentTimeMillis();
             int move = 1;
             int depth = 1;
             final int CHUNK = 250;
 
-            int time_limit = TIME_LIMIT;
-            if (round <= BONUS_TIMES.length && USE_BONUS_TIME) {
+            int time_limit = 490;
+            if (round <= BONUS_TIMES.length) {
                 time_limit += BONUS_TIMES[round-1];
             }
 
@@ -316,10 +308,10 @@ end
                 }
             }
             System.err.println("Got to rollout "+(CHUNK*depth + (CHUNK*(move-1)))+" (+"+tableRollouts+") in "+(System.currentTimeMillis() - start));
-        } else {
-            for (int move = 1; move <= 7; move++) {
-                scores[move] = score_move(state, our_bot_id, move, ROLLOUTS);
-            }
+//        } else {
+//            for (int move = 1; move <= 7; move++) {
+//                scores[move] = score_move(state, our_bot_id, move, ROLLOUTS);
+//            }
         }
 
         for(int move=1; move<=7; move++) {
