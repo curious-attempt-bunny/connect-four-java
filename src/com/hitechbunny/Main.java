@@ -282,121 +282,90 @@ def valid_extent_dir(grid, i, j, di, dj)
 end
      */
 
-    public static int generate_move(String state, int round, int our_bot_id) throws IOException {
-        int best_move = 1;
-        double best_score = -100;
+    public static int generate_move(String state, int round, int our_bot_id, int depth) throws IOException {
+        long start = System.currentTimeMillis();
+        final int CHUNK = 250;
 
-        double[] scores = new double[8];
+        int time_limit = TIME_LIMIT;
+        if (USE_BONUS_TIMES && round <= BONUS_TIMES.length) {
+            time_limit += BONUS_TIMES[round - 1];
+        }
 
-        if (true) {
-            long start = System.currentTimeMillis();
-            int move = 1;
-            int depth = 1;
-            final int CHUNK = 250;
+        int rolloutCount = 0;
+        Map<Integer, Rollout> todo = new HashMap<>();
+        Rollout[] rollouts = new Rollout[8];
+        for(int i=1; i<=7 ;i++) {
+            double score = score_move(state, our_bot_id, i, 1);
+            if (score == 1000) {
+                return i;
+            } else if (score == -1000) {
+                rollouts[i] = null;
+            } else {
+                String key = key_for_move(state, our_bot_id, i);
+                rollouts[i] = Table.table.get(key);
+                if (rollouts[i] == null) {
+                    rollouts[i] = new Rollout();
+                    rollouts[i].freq = 1;
+                    rollouts[i].rlScore = score;
 
-            int time_limit = TIME_LIMIT;
-            if (USE_BONUS_TIMES && round <= BONUS_TIMES.length) {
-                time_limit += BONUS_TIMES[round - 1];
-            }
+                    Table.table.put(key, rollouts[i]);
+                    todo.put(i, rollouts[i]);
 
-            boolean calculation = false;
-            int tableRollouts = 0;
-            Rollout[] rollouts = new Rollout[8];
-            boolean isRolloutRequired = false;
-            while (System.currentTimeMillis() - start < time_limit && ((LEARN_MODE && (depth == 1 || isRolloutRequired)) || (!LEARN_MODE))) {
-                if (scores[move] != 1000 && scores[move] != -1000 && (rollouts[move] == null || rollouts[move].rlScore == null)) {
-                    int chunkSize = depth == 1 ? 1 : CHUNK;
-                    double score = score_move(state, our_bot_id, move, chunkSize);
-
-//                    System.err.print(".");
-//                    System.err.flush();
-                    calculation = true;
-
-                    if (score != -1000 && score != 1000 && (rollouts[move] == null || move <= 4 || (move > 4 && rollouts[move] != rollouts[8-move]))) {
-                        String key = key_for_move(state, our_bot_id, move);
-//                        System.err.println(key);
-                        Rollout r = Table.table.get(key);
-                        if (r == null) {
-                            r = new Rollout();
-                            Table.table.put(key, r);
-                            isRolloutRequired = true;
-                        }
-                        if (depth == 1) {
-                            r.evaluations++;
-                            tableRollouts += r.freq;
-                        }
-
-                        r.score = (r.score * r.freq + score * chunkSize) / (r.freq + chunkSize);
-                        r.freq += chunkSize;
-                        scores[move] = r.score;
-                        rollouts[move] = r;
-                    } else {
-                        scores[move] = score;
-                    }
+                    rolloutCount++;
                 }
-                move++;
-                if (move == 8) {
-                    if (!calculation) {
-                        break;
-                    }
-                    move = 1;
-                    depth += 1;
-                    calculation = false;
-                }
-            }
-//            System.err.println("Got to rollout " + (CHUNK * depth + (CHUNK * (move - 1))) + " (+" + tableRollouts + ") in " + (System.currentTimeMillis() - start));
-            if (isRolloutRequired) {
-                int rolloutCount = 0;
-                for (move = 1; move <= 7; move++) {
-                    if (rollouts[move] != null && rollouts[move].rlScore == null) {
-                        rolloutCount += rollouts[move].freq;
-                    }
-                }
-
-                System.err.println("Took " + (System.currentTimeMillis() - start)+" for "+rolloutCount+" rollouts");
-            }
-//        } else {
-//            for (int move = 1; move <= 7; move++) {
-//                scores[move] = score_move(state, our_bot_id, move, ROLLOUTS);
-//            }
-            for (move = 1; move <= 7; move++) {
-                if (rollouts[move] != null && rollouts[move].rlScore == null) {
-//                    System.err.println(move+" = "+rollouts[move].score+" ("+rollouts[move].freq+")");
-                    rollouts[move].rlScore = rollouts[move].score;
-                }
-                if (rollouts[move] != null) {
-                    scores[move] = rollouts[move].rlScore;
-                    rollouts[move].peers = rollouts;
-                }
+                rollouts[i].peers = rollouts;
             }
         }
 
-        if (LEARN_MODE && EXPLORE && Math.random() < EPSILON) {
-            System.err.print("E");
+        Iterator<Map.Entry<Integer, Rollout>> iterator = todo.entrySet().iterator();
+        while(System.currentTimeMillis() - start < time_limit && !todo.isEmpty()) {
+            Map.Entry<Integer, Rollout> next;
+            if (!iterator.hasNext()) {
+                iterator = todo.entrySet().iterator();
+            }
+
+            next = iterator.next();
+            Rollout r = next.getValue();
+            double score = score_move(state, our_bot_id, next.getKey(), CHUNK);
+            r.rlScore = (r.rlScore * r.freq + score * CHUNK) / (r.freq + CHUNK);
+            r.freq += CHUNK;
+            rolloutCount += CHUNK;
+        }
+        if (!LEARN_MODE && rolloutCount > 0) {
+            System.err.println("Took " + (System.currentTimeMillis() - start)+" for "+rolloutCount+" rollouts");
+        }
+
+        int best_move = 1;
+        double best_score = -100;
+        if (LEARN_MODE && EXPLORE && todo.isEmpty() && Math.random() < EPSILON) {
+            System.err.print("*");
             double total = 0;
             for (int move = 1; move <= 7; move++) {
-                double score = scores[move];
-                if (score == -1000) {
-                    continue;
+                if (rollouts[move] != null) {
+                    total += rollouts[move].rlScore + 1;
                 }
-                total += score + 1;
             }
             double selection = Math.random()*total;
             for (int move = 1; move <= 7; move++) {
-                double score = scores[move];
-                if (score == -1000) {
+                if (rollouts[move] == null) {
                     continue;
                 }
                 best_move = move;
-                if (1+score >= selection) {
+                if (1+rollouts[move].rlScore >= selection) {
                     break;
                 }
-                selection -= (1+score);
+                selection -= (1+rollouts[move].rlScore);
             }
         } else {
             for (int move = 1; move <= 7; move++) {
-                double score = scores[move];
-                System.err.print("Move "+move+" scores "+score+"\n");
+                if (rollouts[move] == null) {
+                    continue;
+                }
+
+                double score = rollouts[move].rlScore;
+                if (!LEARN_MODE && rolloutCount > 0) {
+                    System.err.print("Move "+move+" scores "+score+"\n");
+                }
                 if (score > best_score) {
                     best_move = move;
                     best_score = score;
@@ -404,12 +373,6 @@ end
                 } else {
                     //                System.err.println();
                 }
-            }
-        }
-
-        if (scores[best_move] == 1000 || scores[best_move] == 0 || scores[best_move] == -1 || scores[best_move] == 1.0) {
-            if (USE_TABLE && WRITE_TABLE) {
-                writeTable();
             }
         }
 
@@ -426,8 +389,9 @@ end
     }
 
     private static void learn() throws IOException {
-//        readTable();
+        readTable();
         int played = 0;
+        long lastWrite = System.currentTimeMillis();
         while(true) {
             int bot_id = 1;
             int round = 0;
@@ -438,11 +402,11 @@ end
             while(true) {
                 round++;
                 String state = getState(grid);
-                if (System.currentTimeMillis() - lastTime > 29) {
+                if (!LEARN_MODE && System.currentTimeMillis() - lastTime > 29) {
                     lastTime = System.currentTimeMillis();
                     System.err.println(state.replaceAll(";", "\n").replaceAll(",", "").replaceAll("0", "."));
                 }
-                int move = generate_move(state, round, bot_id);
+                int move = generate_move(state, round, bot_id, 2);
                 int drop = getDrop(grid[move]);
                 if (drop == -1) {
                     throw new RuntimeException("Invalid move!");
@@ -457,11 +421,11 @@ end
                 }
                 Rollout r = Table.table.get(key);
                 rollouts.add(0, r);
-                if (r.score == -1.0 || r.score == 1.0 || r.score == 0.0) {
-                    adjust(rollouts, r.score);
-                    if (r.score == -1.0) {
+                if (r.rlScore == -1.0 || r.rlScore == 1.0 || r.rlScore == 0.0) {
+                    adjust(rollouts, r.rlScore);
+                    if (r.rlScore == -1.0) {
                         System.err.print(" "+(3 - bot_id) + " WINS(-1) ");
-                    } else if (r.score == 1.0) {
+                    } else if (r.rlScore == 1.0) {
                         System.err.print(" "+bot_id + " WINS(1) ");
                     } else {
                         System.err.print(" DRAW(0) ");
@@ -472,8 +436,9 @@ end
                 bot_id = 3-bot_id;
             }
             played++;
-            if (played % 10000 == 0) {
-//                writeTable();
+            if (System.currentTimeMillis() - lastWrite > 30000) {
+                writeTable();
+                lastWrite = System.currentTimeMillis();
             }
         }
     }
@@ -490,36 +455,32 @@ end
 // correct 0.75
 
     private static void adjust(List<Rollout> rollouts, double result) {
-        boolean changed = false;
-        int iterations = 0;
-        while(!changed && iterations < 100) {
-            iterations+=1;
-            final double DECAY = 0.9;
+//        boolean changed = false;
+//        int iterations = 0;
+//        while(!changed && iterations < 100) {
+//            iterations+=1;
+            final double DECAY = 0.8;
             double weighting = DECAY;
             for (Rollout r : rollouts) {
-                if (r.rlScore == null) {
-                    r.rlScore = r.score;
-                }
-
                 double rlScore = weighting * result + (1 - weighting) * r.rlScore;
                 weighting *= DECAY;
 //                System.err.println(r.rlScore + " ==> " + rlScore);
                 r.rlScore = rlScore;
 
-                for(Rollout peer : r.peers) {
-                    if (peer != null && peer != r && peer.rlScore > r.rlScore) {
-//                        System.err.println("Changed (peer "+peer.rlScore+" > "+r.rlScore);
-                        changed = true;
-                    }
-                }
+//                for(Rollout peer : r.peers) {
+//                    if (peer != null && peer != r && peer.rlScore > r.rlScore) {
+////                        System.err.println("Changed (peer "+peer.rlScore+" > "+r.rlScore);
+////                        changed = true;
+//                    }
+//                }
 
                 result = -result;
             }
 //            System.err.println("Adjustment iteration "+iterations);
-        }
-        if (iterations > 1) {
-            System.err.println("Iterations: "+iterations);
-        }
+//        }
+//        if (iterations > 1) {
+//            System.err.println("Iterations: "+iterations);
+//        }
     }
 
     private static void compete() throws IOException {
@@ -546,7 +507,7 @@ end
             } else if (line.startsWith("action move ")) {
                 round++;
                 long start_time = System.currentTimeMillis();
-                int move = generate_move(state, round, our_bot_id);
+                int move = generate_move(state, round, our_bot_id, 1);
                 System.out.println("place_disc "+(move-1));
                 System.err.println("Time: "+(System.currentTimeMillis()-start_time));
             }
