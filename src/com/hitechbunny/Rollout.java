@@ -4,4 +4,5 @@ class Rollout {
     int freq;
     Double rlScore;
     Rollout[] peers;
+    Double score;
 }

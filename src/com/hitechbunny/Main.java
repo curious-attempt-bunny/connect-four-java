@@ -25,7 +25,12 @@ public class Main {
             throw new RuntimeException("Illegal move!");
         }
         grid[move][drop] = our_bot_id;
+        String key = key_for_grid(grid);
+        grid[move][drop] = 0;
+        return key;
+    }
 
+    private static String key_for_grid(int[][] grid) {
         StringBuffer key = new StringBuffer(7*6);
         for (int j = 1; j <= 6; j++) {
             for (int i = 1; i <= 7; i++) {
@@ -75,9 +80,19 @@ public class Main {
         }
         grid[move][drop] = our_bot_id;
         if (winning_move(grid, move, drop, our_bot_id)) {
+            grid[move][drop] = 0;
             return 1000;
         }
 
+        double score = scoreGrid(our_bot_id, rollouts, grid);
+
+        grid[move][drop] = 0;
+        return score;
+    }
+
+    private static double scoreGrid(int our_bot_id, int rollouts, int[][] grid) {
+        int j;
+        int drop;
         int[][] s = new int[9][8];
         int[] legal = new int[7];
         int[] avoided = new int[7];
@@ -282,12 +297,130 @@ def valid_extent_dir(grid, i, j, di, dj)
 end
      */
 
-    public static int generate_move(String state, int round, int our_bot_id, int depth) throws IOException {
+    /*
+01 function minimax(node, depth, maximizingPlayer)
+02     if depth = 0 or node is a terminal node
+03         return the heuristic value of node
+
+04     if maximizingPlayer
+05         bestValue := −∞
+06         for each child of node
+07             v := minimax(child, depth − 1, FALSE)
+08             bestValue := max(bestValue, v)
+09         return bestValue
+
+10     else    (* minimizing player *)
+11         bestValue := +∞
+12         for each child of node
+13             v := minimax(child, depth − 1, TRUE)
+14             bestValue := min(bestValue, v)
+15         return bestValue
+     */
+
+    public static int pick_move(String state, int bot_id) {
+        int[][] grid = getGrid(state);
+        int best_move = 1;
+        double best_score = -10000;
+        for(int i=1; i<=7; i++) {
+            double score = minmax(grid, i, bot_id, 3, ""+i);
+
+//            if (score != -1000) {
+//                String key = key_for_move(state, bot_id, i);
+//                Rollout r = Table.table.get(key);
+//                if (r == null) {
+//                    r = new Rollout();
+//                    Table.table.put(key, r);
+//                }
+//                if (r.rlScore == null) {
+//                    r.rlScore = score;
+//                }
+//            }
+
+//            System.err.println(i+" minimax : "+score);
+
+            if (score > best_score) {
+                best_score = score;
+                best_move = i;
+            }
+        }
+
+        String key = key_for_grid(grid);
+        Rollout r = Table.table.get(key);
+        if (r == null) {
+            r = new Rollout();
+            Table.table.put(key, r);
+        }
+        if (r.rlScore == null) {
+            r.rlScore = -best_score;
+        }
+
+        return best_move;
+    }
+
+    private static double minmax(int[][] grid, int move, int bot_id, int depth, String description) {
+        int drop = getDrop(grid[move]);
+        if (drop == -1) {
+//            System.err.println(description+": illegal");
+            // illegal move
+            return -1000;
+        }
+        grid[move][drop] = bot_id;
+
+        if (winning_move(grid, move, drop, bot_id)) {
+//            System.err.println(description+": wins");
+            // terminal move
+            grid[move][drop] = 0;
+            return 1;
+        }
+
+        if (grid[1][1] != 0 && grid[2][1] != 0 && grid[3][1] != 0 && grid[4][1] != 0 && grid[5][1] != 0 && grid[6][1] != 0 && grid[7][1] != 0) {
+//            System.err.println(description+": draws");
+            // terminal move
+            grid[move][drop] = 0;
+            return 0;
+        }
+
+        if (depth == 0) {
+            String key = key_for_grid(grid);
+            grid[move][drop] = 0;
+
+            Rollout r = Table.table.get(key);
+            if (r != null && r.rlScore != null) {
+//                System.err.println(description + ": scores " + r.rlScore + " (RL hit) vs rollout hit: " + r.score);
+//                System.err.print("r");
+                return r.rlScore;
+            }
+            if (r != null && r.score != null) {
+//                System.err.println(description + ": scores " + r.score + " (rollout hit)");
+                return r.score;
+            }
+            if (r == null) {
+                r = new Rollout();
+                Table.table.put(key, r);
+            }
+            r.score = scoreGrid(bot_id, 2000, grid);
+//            System.err.println(description + ": scores " + r.score);
+            return r.score;
+        }
+
+        double best_score = -10000;
+        for(int i=1; i<=7; i++) {
+            double score = minmax(grid, i, 3-bot_id, depth-1, description+i);
+            if (score > best_score) {
+                best_score = score;
+            }
+        }
+
+        grid[move][drop] = 0;
+        return -best_score;
+    }
+
+    public static int generate_move(String state, int round, int our_bot_id) throws IOException {
         long start = System.currentTimeMillis();
         final int CHUNK = 250;
 
         int time_limit = TIME_LIMIT;
-        if (USE_BONUS_TIMES && round <= BONUS_TIMES.length) {
+        if (!LEARN_MODE && USE_BONUS_TIMES && round <= BONUS_TIMES.length) {
             time_limit += BONUS_TIMES[round - 1];
         }
 
@@ -388,8 +521,8 @@ end
         }
     }
 
-    private static void learn() throws IOException {
-        readTable();
+    private static void  learn() throws IOException {
+//        readTable();
         int played = 0;
         long lastWrite = System.currentTimeMillis();
         while(true) {
@@ -402,37 +535,35 @@ end
             while(true) {
                 round++;
                 String state = getState(grid);
-                if (!LEARN_MODE && System.currentTimeMillis() - lastTime > 29) {
-                    lastTime = System.currentTimeMillis();
+//                if (!LEARN_MODE && System.currentTimeMillis() - lastTime > 29) {
+//                    lastTime = System.currentTimeMillis();
                     System.err.println(state.replaceAll(";", "\n").replaceAll(",", "").replaceAll("0", "."));
-                }
-                int move = generate_move(state, round, bot_id, 2);
+//                }
+//                int move = generate_move(state, round, bot_id);
+                int move = pick_move(state, bot_id);
                 int drop = getDrop(grid[move]);
                 if (drop == -1) {
                     throw new RuntimeException("Invalid move!");
                 }
                 String key = key_for_move(state, bot_id, move);
-                System.err.print(move);
+                System.err.println(move);
                 grid[move][drop] = bot_id;
-                if (!Table.table.containsKey(key)) {
-                    adjust(rollouts, 1);
-                    System.err.print(" "+bot_id + " WINS(missing key) ");
-                    break;
-                }
+
                 Rollout r = Table.table.get(key);
                 rollouts.add(0, r);
-                if (r.rlScore == -1.0 || r.rlScore == 1.0 || r.rlScore == 0.0) {
-                    adjust(rollouts, r.rlScore);
-                    if (r.rlScore == -1.0) {
-                        System.err.print(" "+(3 - bot_id) + " WINS(-1) ");
-                    } else if (r.rlScore == 1.0) {
-                        System.err.print(" "+bot_id + " WINS(1) ");
-                    } else {
-                        System.err.print(" DRAW(0) ");
-                    }
 
+                if (winning_move(grid, move, drop, bot_id)) {
+                    adjust(rollouts, 1);
+                    System.err.print(" "+bot_id + " WINS ");
                     break;
                 }
+
+                if (grid[1][1] != 0 && grid[2][1] != 0 && grid[3][1] != 0 && grid[4][1] != 0 && grid[5][1] != 0 && grid[6][1] != 0 && grid[7][1] != 0) {
+                    adjust(rollouts, 0);
+                    System.err.println(" DRAWS ");
+                    break;
+                }
+
                 bot_id = 3-bot_id;
             }
             played++;
@@ -455,6 +586,7 @@ end
 // correct 0.75
 
     private static void adjust(List<Rollout> rollouts, double result) {
+//        if (1==1) return; // no-op for now
 //        boolean changed = false;
 //        int iterations = 0;
 //        while(!changed && iterations < 100) {
@@ -462,10 +594,12 @@ end
             final double DECAY = 0.8;
             double weighting = DECAY;
             for (Rollout r : rollouts) {
-                double rlScore = weighting * result + (1 - weighting) * r.rlScore;
+                if (r != null) {
+                    double rlScore = weighting * result + (1 - weighting) * r.rlScore;
+                    System.err.println(r.rlScore + " ==> " + rlScore);
+                    r.rlScore = rlScore;
+                }
                 weighting *= DECAY;
-//                System.err.println(r.rlScore + " ==> " + rlScore);
-                r.rlScore = rlScore;
 
 //                for(Rollout peer : r.peers) {
 //                    if (peer != null && peer != r && peer.rlScore > r.rlScore) {
@@ -507,7 +641,7 @@ end
             } else if (line.startsWith("action move ")) {
                 round++;
                 long start_time = System.currentTimeMillis();
-                int move = generate_move(state, round, our_bot_id, 1);
+                int move = generate_move(state, round, our_bot_id);
                 System.out.println("place_disc "+(move-1));
                 System.err.println("Time: "+(System.currentTimeMillis()-start_time));
             }
@@ -522,7 +656,9 @@ end
         BufferedWriter f = new BufferedWriter(new FileWriter("/Users/home/IdeaProjects/connect-four-java/table.csv"));
         for (Map.Entry<String, Rollout> entry : Table.table.entrySet()) {
 //            f.append(entry.getKey()+","+entry.getValue().freq+","+entry.getValue().score+","+entry.getValue().evaluations+"\n");
-            f.append(entry.getKey()+","+entry.getValue().rlScore+"\n");
+            f.append(entry.getKey()+
+                    ","+(entry.getValue().rlScore == null ? "" : entry.getValue().rlScore)+
+                    ","+(entry.getValue().score == null ? "" : entry.getValue().score)+"\n");
         }
         f.close();
     }
@@ -537,7 +673,12 @@ end
                 }
                 String[] parts = line.split(",");
                 Rollout r = new Rollout();
-                r.rlScore = Double.parseDouble(parts[1]);
+                if (!parts[1].isEmpty()) {
+                    r.rlScore = Double.parseDouble(parts[1]);
+                }
+                if (!parts[2].isEmpty()) {
+                    r.score = Double.parseDouble(parts[2]);
+                }
                 Table.table.put(parts[0], r);
             }
             f.close();
