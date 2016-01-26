@@ -4,6 +4,7 @@ import org.omg.SendingContext.RunTime;
 
 import java.io.*;
 import java.util.*;
+import java.util.concurrent.*;
 
 public class Main {
 
@@ -90,6 +91,28 @@ public class Main {
         return score;
     }
 
+    private static final int THREADS = Runtime.getRuntime().availableProcessors();
+    private static ExecutorService pool = Executors.newWorkStealingPool(THREADS);
+
+    private static double scoreGridParallel(int bot_id, int rollouts, int[][] grid) {
+        int portions = rollouts / THREADS;
+        List<Future<Double>> results = new ArrayList<>();
+        for(int i=0; i<THREADS; i++) {
+            results.add(pool.submit(() -> scoreGrid(bot_id, portions, grid)));
+        }
+        double result = 0;
+        for (Future<Double> future : results) {
+            try {
+                result += future.get() / THREADS;
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            } catch (ExecutionException e) {
+                throw new RuntimeException(e);
+            }
+        }
+        return result;
+    }
+
     private static double scoreGrid(int our_bot_id, int rollouts, int[][] grid) {
         int j;
         int drop;
@@ -101,7 +124,7 @@ public class Main {
         int wins = 0;
         int losses = 0;
         int draws = 0;
-
+        
         for(int rollout = 0; rollout< rollouts; rollout++) {
             for (int i = 0; i < 9; i++) {
                 for (j = 0; j < 8; j++) {
@@ -322,7 +345,9 @@ end
         int best_move = 1;
         double best_score = -10000;
         for(int i=1; i<=7; i++) {
+//            long start = System.currentTimeMillis();
             double score = minmax(grid, i, bot_id, 3, ""+i);
+//            System.err.println("Took "+(System.currentTimeMillis()-start));
 
 //            if (score != -1000) {
 //                String key = key_for_move(state, bot_id, i);
@@ -335,6 +360,21 @@ end
 //                    r.rlScore = score;
 //                }
 //            }
+
+            String key = key_for_grid(grid);
+            Rollout r = Table.table.get(key);
+            if (r == null) {
+                r = new Rollout();
+                Table.table.put(key, r);
+            }
+            if (r.rlScore == null) {
+                r.rlScore = score;
+                System.err.println("N/A --> "+r.rlScore+" ");
+            } else {
+                double previous = r.rlScore;
+                r.rlScore = (0.8*r.rlScore) + (0.2*score);
+                System.err.println(previous+" --> "+r.rlScore+" (look-head was "+(score)+") ");
+            }
 
             System.err.println(i+" minimax : "+score);
 
@@ -358,7 +398,6 @@ end
             r.rlScore = (0.8*r.rlScore) + (0.2*-best_score);
             System.err.print(previous+" --> "+r.rlScore+" (look-head was "+(-best_score)+") ");
         }
-
         return best_move;
     }
 
@@ -372,7 +411,7 @@ end
         grid[move][drop] = bot_id;
 
         if (winning_move(grid, move, drop, bot_id)) {
-            System.err.println(description+": wins");
+//            System.err.println(description+": wins");
             // terminal move
             grid[move][drop] = 0;
             return 1;
@@ -403,7 +442,10 @@ end
                 r = new Rollout();
                 Table.table.put(key, r);
             }
-            r.score = scoreGrid(bot_id, 2000, grid);
+
+//            r.score = scoreGrid(bot_id, 2000, grid);
+            r.score = scoreGridParallel(bot_id, 2000, grid);
+
 //            System.err.println(description + ": scores " + r.score);
             return r.score;
         }
@@ -442,6 +484,7 @@ end
                 String key = key_for_move(state, our_bot_id, i);
                 rollouts[i] = Table.table.get(key);
                 if (rollouts[i] == null) {
+                    System.err.println("No entry for "+key);
                     rollouts[i] = new Rollout();
                     rollouts[i].freq = 1;
                     rollouts[i].rlScore = score;
@@ -681,9 +724,9 @@ end
                 if (!parts[1].isEmpty()) {
                     r.rlScore = Double.parseDouble(parts[1]);
                 }
-                if (!parts[2].isEmpty()) {
-                    r.score = Double.parseDouble(parts[2]);
-                }
+//                if (!parts[2].isEmpty()) {
+//                    r.score = Double.parseDouble(parts[2]);
+//                }
                 Table.table.put(parts[0], r);
             }
             f.close();
