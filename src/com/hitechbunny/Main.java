@@ -336,7 +336,7 @@ end
 //                }
 //            }
 
-//            System.err.println(i+" minimax : "+score);
+            System.err.println(i+" minimax : "+score);
 
             if (score > best_score) {
                 best_score = score;
@@ -352,6 +352,11 @@ end
         }
         if (r.rlScore == null) {
             r.rlScore = -best_score;
+            System.err.print("N/A --> "+r.rlScore+" ");
+        } else {
+            double previous = r.rlScore;
+            r.rlScore = (0.8*r.rlScore) + (0.2*-best_score);
+            System.err.print(previous+" --> "+r.rlScore+" (look-head was "+(-best_score)+") ");
         }
 
         return best_move;
@@ -367,7 +372,7 @@ end
         grid[move][drop] = bot_id;
 
         if (winning_move(grid, move, drop, bot_id)) {
-//            System.err.println(description+": wins");
+            System.err.println(description+": wins");
             // terminal move
             grid[move][drop] = 0;
             return 1;
@@ -586,7 +591,7 @@ end
 // correct 0.75
 
     private static void adjust(List<Rollout> rollouts, double result) {
-//        if (1==1) return; // no-op for now
+        if (1==1) return; // no-op for now
 //        boolean changed = false;
 //        int iterations = 0;
 //        while(!changed && iterations < 100) {
