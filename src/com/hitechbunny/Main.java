@@ -5,6 +5,7 @@ import org.omg.SendingContext.RunTime;
 import java.io.*;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.regex.Pattern;
 
 public class Main {
 
@@ -340,40 +341,25 @@ end
 15         return bestValue
      */
 
-    public static int pick_move(String state, int bot_id) {
+    public static int pick_move(String state, int bot_id, int depth) {
         int[][] grid = getGrid(state);
         int best_move = 1;
         double best_score = -10000;
         for(int i=1; i<=7; i++) {
 //            long start = System.currentTimeMillis();
-            double score = minmax(grid, i, bot_id, 3, ""+i);
+            double score = minmax(grid, i, bot_id, depth, ""+i);
 //            System.err.println("Took "+(System.currentTimeMillis()-start));
 
-//            if (score != -1000) {
-//                String key = key_for_move(state, bot_id, i);
-//                Rollout r = Table.table.get(key);
-//                if (r == null) {
-//                    r = new Rollout();
-//                    Table.table.put(key, r);
-//                }
-//                if (r.rlScore == null) {
-//                    r.rlScore = score;
-//                }
-//            }
-
-            String key = key_for_grid(grid);
-            Rollout r = Table.table.get(key);
-            if (r == null) {
-                r = new Rollout();
-                Table.table.put(key, r);
-            }
-            if (r.rlScore == null) {
-                r.rlScore = score;
-                System.err.println("N/A --> "+r.rlScore+" ");
-            } else {
-                double previous = r.rlScore;
-                r.rlScore = (0.8*r.rlScore) + (0.2*score);
-                System.err.println(previous+" --> "+r.rlScore+" (look-head was "+(score)+") ");
+            if (score != -1000) {
+                String key = key_for_move(state, bot_id, i);
+                Rollout r = Table.table.get(key);
+                if (r == null) {
+                    r = new Rollout();
+                    Table.table.put(key, r);
+                }
+                if (r.rlScore == null) {
+                    r.rlScore = score;
+                }
             }
 
             System.err.println(i+" minimax : "+score);
@@ -442,12 +428,14 @@ end
                 r = new Rollout();
                 Table.table.put(key, r);
             }
-
-//            r.score = scoreGrid(bot_id, 2000, grid);
-            r.score = scoreGridParallel(bot_id, 2000, grid);
+//
+////            r.score = scoreGrid(bot_id, 2000, grid);
+//            r.score = scoreGridParallel(bot_id, 2000, grid);
+            double score = scoreGridParallel(bot_id, 2000, grid);
+            r.score = score;
 
 //            System.err.println(description + ": scores " + r.score);
-            return r.score;
+            return score;
         }
 
         double best_score = -10000;
@@ -571,24 +559,43 @@ end
 
     private static void  learn() throws IOException {
 //        readTable();
+        List<String> states = new ArrayList<>();
+        BufferedReader in = new BufferedReader(new FileReader("top-states.txt"));
+        while(true) {
+            String line = in.readLine();
+            if (line == null) {
+                break;
+            }
+            states.add(0, line);
+        }
+        states.add("0,0,0,0,0,0,0;0,0,0,0,0,0,0;0,0,0,0,0,0,0;0,0,0,0,0,0,0;0,0,0,0,0,0,0;0,0,0,0,0,0,0");
+
+        int depth = 3;
+
         int played = 0;
         long lastWrite = System.currentTimeMillis();
         while(true) {
             int bot_id = 1;
-            int round = 0;
-            int[][] grid = getGrid("0,0,0,0,0,0,0;0,0,0,0,0,0,0;0,0,0,0,0,0,0;0,0,0,0,0,0,0;0,0,0,0,0,0,0;0,0,0,0,0,0,0");
+//            int round = 0;
+//            String start_state = "0,0,0,0,0,0,0;0,0,0,0,0,0,0;0,0,0,0,0,0,0;0,0,0,0,0,0,0;0,0,0,0,0,0,0;0,0,0,0,0,0,0";
+//            String start_state = states.get((int) (Math.random() * states.size()));
+            String start_state = states.get(played % states.size());
+            if ((start_state.length() - start_state.replaceAll("0", "").length()) % 2 == 1) {
+                bot_id = 2;
+            }
+            int[][] grid = getGrid(start_state);
             List<Rollout> rollouts = new ArrayList<>();
             long lastTime = System.currentTimeMillis();
             System.err.println("---------new game----------- played: "+played+" table size: "+Table.table.size());
             while(true) {
-                round++;
+//                round++;
                 String state = getState(grid);
 //                if (!LEARN_MODE && System.currentTimeMillis() - lastTime > 29) {
 //                    lastTime = System.currentTimeMillis();
                     System.err.println(state.replaceAll(";", "\n").replaceAll(",", "").replaceAll("0", "."));
 //                }
 //                int move = generate_move(state, round, bot_id);
-                int move = pick_move(state, bot_id);
+                int move = pick_move(state, bot_id, depth);
                 int drop = getDrop(grid[move]);
                 if (drop == -1) {
                     throw new RuntimeException("Invalid move!");
@@ -613,9 +620,18 @@ end
                 }
 
                 bot_id = 3-bot_id;
+//                writeTable();
+//                System.exit(0);
             }
             played++;
-            if (System.currentTimeMillis() - lastWrite > 30000) {
+//            if (depth == 0 && played > states.size()) {
+//                depth = 1;
+//            } else if (depth == 1 && played > states.size()*4) {
+//                depth = 2;
+//            } else if (depth == 2 && played > states.size()*8) {
+//                depth = 3;
+//            }
+            if (System.currentTimeMillis() - lastWrite > 30000 && played % 10 == 0) {
                 writeTable();
                 lastWrite = System.currentTimeMillis();
             }
@@ -703,10 +719,12 @@ end
     private static void writeTable() throws IOException {
         BufferedWriter f = new BufferedWriter(new FileWriter("/Users/home/IdeaProjects/connect-four-java/table.csv"));
         for (Map.Entry<String, Rollout> entry : Table.table.entrySet()) {
+            if (entry.getValue().rlScore != null) {
 //            f.append(entry.getKey()+","+entry.getValue().freq+","+entry.getValue().score+","+entry.getValue().evaluations+"\n");
-            f.append(entry.getKey()+
-                    ","+(entry.getValue().rlScore == null ? "" : entry.getValue().rlScore)+
-                    ","+(entry.getValue().score == null ? "" : entry.getValue().score)+"\n");
+                f.append(entry.getKey() +
+                        "," + (entry.getValue().rlScore == null ? "" : entry.getValue().rlScore) +
+                        "," + (entry.getValue().score == null ? "" : entry.getValue().score) + "\n");
+            }
         }
         f.close();
     }
