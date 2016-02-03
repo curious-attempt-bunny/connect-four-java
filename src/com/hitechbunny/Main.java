@@ -452,9 +452,9 @@ public class Main {
 
         while(System.currentTimeMillis() - start < time_limit) {
             // select
-            Node leaf = root.select();
+            List<Node> nodes = root.select();
             // expand
-            leaf.expand();
+            nodes.get(0).expand(nodes);
         }
 
         BufferedWriter out= new BufferedWriter(new FileWriter("mcts.dot"));

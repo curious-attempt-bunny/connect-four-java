@@ -3,11 +3,16 @@ package com.hitechbunny;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Created by home on 2/1/16.
  */
 public class Node {
+    private static Map<String,Node> table = new HashMap<>(100000);
     private static final int ROLLOUTS = 50;
     Node[] children;
     private double score;
@@ -28,14 +33,17 @@ public class Node {
         name = "";
     }
 
-    public Node select() {
-        return select(this.rollouts);
+    public List<Node> select() {
+        List<Node> nodes = new ArrayList<>();
+        nodes.add(this);
+        return select(this.rollouts, nodes);
     }
 
-    private Node select(int rollouts) {
+    private List<Node> select(int rollouts, List<Node> nodes) {
+
         if (children == null || terminal) {
             System.err.println("Selected "+state+" ("+multiplier+")");
-            return this;
+            return nodes;
         }
 //        System.err.println("Selecting children of "+state);
 
@@ -58,16 +66,17 @@ public class Node {
             }
         }
 
-        return best.select(rollouts);
+        nodes.add(0, best);
+
+        return best.select(rollouts, nodes);
     }
 
-    public void expand() {
+    public void expand(List<Node> nodes) {
         if (terminal) {
             System.err.println("TERMINAL!");
             rollouts += ROLLOUTS;
-            Node prev = parent;
             double child_score = score;
-            while(prev != null) {
+            for(Node prev : nodes) {
                 child_score = -child_score;
                 prev.rollouts += ROLLOUTS;
 //                System.err.print(prev.state+" "+prev.score+" --> "+child_score);
@@ -76,8 +85,6 @@ public class Node {
                                 (child_score*ROLLOUTS)
                 )/(prev.rollouts+rollouts);
 //                System.err.println(" = "+prev.score);
-
-                prev = prev.parent;
             }
             return;
         }
@@ -98,10 +105,14 @@ public class Node {
                 continue;
             }
 //            System.err.println("\t"+nextState);
-            Node child = new Node(this, nextState, 3-bot_id, -multiplier);
+            Node child = table.get(nextState);
+            if (child == null) {
+                child = new Node(this, nextState, 3 - bot_id, -multiplier);
+                table.put(nextState, child);
+            }
             child.name = name+move;
             children[move-1] = child;
-            child.rollouts = ROLLOUTS;
+            child.rollouts += ROLLOUTS;
 
             if (Main.winning_move(grid, move, drop, bot_id)) {
 //                if (1==1) throw new RuntimeException("winning move!");
@@ -119,19 +130,16 @@ public class Node {
 
             System.err.println(child.state+" scores "+child.score+" ("+child.multiplier+")");
             // TODO make this one single update
-            Node prev = this;
             double child_score = child.score;
-            while(prev != null) {
+            for(Node prev : nodes) {
                 child_score = -child_score;
-                prev.rollouts += child.rollouts;
-                if (child.terminal) System.err.print(prev.state+" "+prev.score+" --> "+child_score);
+                prev.rollouts += ROLLOUTS;
+                if (child.terminal) System.err.print(prev.state + " " + prev.score + " --> " + child_score);
                 prev.score = (
                                 (prev.score*prev.rollouts)+
-                                (child_score*child.rollouts)
-                            )/(prev.rollouts+child.rollouts);
+                                (child_score*ROLLOUTS)
+                            )/(prev.rollouts+ROLLOUTS);
                 if (child.terminal) System.err.println(" = "+prev.score);
-
-                prev = prev.parent;
             }
 //            if (child.terminal)
 
