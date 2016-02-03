@@ -50,7 +50,39 @@ public class Main {
         }
     }
 
-    private static String getState(int[][] grid) {
+    public static String state_for_grid(int[][] grid) {
+        StringBuffer key = new StringBuffer(7*6);
+        for (int j = 1; j <= 6; j++) {
+            for (int i = 1; i <= 7; i++) {
+                if (i != 1) {
+                    key.append(",");
+                }
+                key.append(Integer.valueOf(grid[i][j]));
+            }
+            key.append(";");
+        }
+
+        StringBuffer alternateKey = new StringBuffer(7*6);
+        for (int j = 1; j <= 6; j++) {
+            for (int i = 7; i >= 1; i--) {
+                if (i != 7) {
+                    alternateKey.append(",");
+                }
+                alternateKey.append(Integer.valueOf(grid[i][j]));
+            }
+            alternateKey.append(";");
+        }
+
+        String encoding = key.toString();
+        String reverse = alternateKey.toString();
+        if (reverse.compareTo(encoding) < 0) {
+            return reverse;
+        } else {
+            return encoding;
+        }
+    }
+
+    public static String getState(int[][] grid) {
         StringBuffer state = new StringBuffer(7*6);
         for (int j = 1; j <= 6; j++) {
             for (int i = 1; i <= 7; i++) {
@@ -89,7 +121,7 @@ public class Main {
     private static final int THREADS = Runtime.getRuntime().availableProcessors();
     private static ExecutorService pool = Executors.newWorkStealingPool(THREADS);
 
-    private static double scoreGridParallel(int bot_id, int rollouts, int[][] grid) {
+    public static double scoreGridParallel(int bot_id, int rollouts, int[][] grid) {
         int portions = rollouts / THREADS;
         List<Future<Double>> results = new ArrayList<>();
         for(int i=0; i<THREADS; i++) {
@@ -108,7 +140,7 @@ public class Main {
         return result;
     }
 
-    private static double scoreGrid(int our_bot_id, int rollouts, int[][] grid) {
+    public static double scoreGrid(int our_bot_id, int rollouts, int[][] grid) {
         int j;
         int drop;
         int[][] s = new int[9][8];
@@ -228,7 +260,7 @@ public class Main {
         return sum;
     }
 
-    private static int[][] getGrid(String state) {
+    public static int[][] getGrid(String state) {
         int[][] grid = new int[9][8];
 
         int j = 1;
@@ -253,7 +285,7 @@ public class Main {
         return grid;
     }
 
-    private static int getDrop(int[] ints) {
+    public static int getDrop(int[] ints) {
         int drop = -1;
         for(int j=1; j<=6; j++) {
             if (ints[j] == 0) {
@@ -265,7 +297,7 @@ public class Main {
         return drop;
     }
 
-    private static boolean winning_move(int[][] grid, int i, int j, int player_id) {
+    public static boolean winning_move(int[][] grid, int i, int j, int player_id) {
         if (valid_extent_dir(grid, i, j, player_id, -1, -1) + valid_extent_dir(grid, i, j, player_id,  1,  1) >= 3) {
             return true;
         }
@@ -407,6 +439,34 @@ public class Main {
         return best_move;
     }
 
+    public static int generate_mcts_move(String state, int round, int our_bot_id) throws IOException {
+        long start = System.currentTimeMillis();
+
+        int time_limit = TIME_LIMIT;
+        if (USE_BONUS_TIMES && round <= BONUS_TIMES.length) {
+            time_limit += BONUS_TIMES[round - 1];
+        }
+        time_limit = 500;
+
+        Node root = new Node(null, state, our_bot_id, -1);
+
+        while(System.currentTimeMillis() - start < time_limit) {
+            // select
+            Node leaf = root.select();
+            // expand
+            leaf.expand();
+        }
+
+        BufferedWriter out= new BufferedWriter(new FileWriter("mcts.dot"));
+        out.append("digraph {\n");
+        out.append("  rankdir=\"LR\";\n");
+        root.dump(out, 3);
+        out.append("}\n");
+        out.close();
+
+        return root.getBestMove();
+    }
+
     public static void main(String[] args) throws Exception {
         System.err.println("Cores: "+ Runtime.getRuntime().availableProcessors());
         compete();
@@ -434,7 +494,7 @@ public class Main {
             } else if (line.startsWith("action move ")) {
                 round++;
                 long start_time = System.currentTimeMillis();
-                int move = generate_move(state, round, our_bot_id);
+                int move = generate_mcts_move(state, round, our_bot_id);
                 System.out.println("place_disc "+(move-1));
                 System.err.println("Time: "+(System.currentTimeMillis()-start_time));
             }
