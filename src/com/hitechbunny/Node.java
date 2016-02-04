@@ -1,7 +1,6 @@
 package com.hitechbunny;
 
 import java.io.BufferedWriter;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -13,14 +12,16 @@ import java.util.Map;
  */
 public class Node {
     private static Map<String,Node> table = new HashMap<>(100000);
-    private static final int ROLLOUTS = 50;
+    private static final int MAJOR_ROLLOUTS = 500; //1900;
+    private static final int MINOR_ROLLOUTS = 25;
+
     Node[] children;
     private double score;
     private Node parent;
     private String state;
     private int bot_id;
     private int multiplier;
-    private int rollouts;
+    public int rollouts;
     private int bestMove;
     private String name;
     private boolean terminal;
@@ -42,7 +43,7 @@ public class Node {
     private List<Node> select(int rollouts, List<Node> nodes) {
 
         if (children == null || terminal) {
-            System.err.println("Selected "+state+" ("+multiplier+")");
+//            System.err.println("Selected "+state+" ("+multiplier+")");
             return nodes;
         }
 //        System.err.println("Selecting children of "+state);
@@ -50,6 +51,7 @@ public class Node {
         Node best = null;
         double best_weight = 0;
         double c = Math.sqrt(2);
+//        double c = Math.sqrt(10);
         double lnt = Math.log(rollouts);
         for(Node child : children) {
             if (child == null) {
@@ -58,36 +60,47 @@ public class Node {
 //            best = child; if (1==1) break;
             double weight = (child.multiplier*child.score+1)/2 + c*Math.sqrt(lnt / child.rollouts);
 //            System.err.println("Child "+child.state+" has score "+child.score+" and weight "+weight);
-            if (best == null || (weight > best_weight && best.multiplier*best.score < 1.0) || child.multiplier*child.score == 1.0) {
+//            if (best == null || (weight > best_weight && best.multiplier*best.score < 1.0) || (child.terminal && child.multiplier*child.score == 1.0)) {
+            if (best == null || weight > best_weight) {
                 best = child;
                 best_weight = weight;
             } else if (child.terminal) {
-                System.err.println("Passed over terminal ("+weight+" ["+child.score+"] vs "+best_weight+" ["+best.score+"])");
+//                System.err.println("Passed over terminal ("+weight+" ["+child.score+"] vs "+best_weight+" ["+best.score+"])");
             }
         }
 
         nodes.add(0, best);
+
+        if (best.rollouts < MAJOR_ROLLOUTS) {
+            return nodes;
+        }
 
         return best.select(rollouts, nodes);
     }
 
     public void expand(List<Node> nodes) {
         if (terminal) {
-            System.err.println("TERMINAL!");
-            rollouts += ROLLOUTS;
+//            System.err.println("TERMINAL!");
+            rollouts += MAJOR_ROLLOUTS;
             double child_score = score;
             for(Node prev : nodes) {
+                prev.add(child_score, MAJOR_ROLLOUTS);
                 child_score = -child_score;
-                prev.rollouts += ROLLOUTS;
-//                System.err.print(prev.state+" "+prev.score+" --> "+child_score);
-                prev.score = (
-                        (prev.score*prev.rollouts)+
-                                (child_score*ROLLOUTS)
-                )/(prev.rollouts+rollouts);
-//                System.err.println(" = "+prev.score);
             }
             return;
         }
+
+        if (rollouts < MAJOR_ROLLOUTS && !name.isEmpty()) {
+            int[][] grid = Main.getGrid(state);
+            double child_score = Main.scoreGrid(3 - bot_id, MAJOR_ROLLOUTS, grid);
+//            child_score = child_score * multiplier;
+            for(Node prev : nodes) {
+                prev.add(child_score, MAJOR_ROLLOUTS);
+                child_score = -child_score;
+            }
+            return;
+        }
+
 //        System.err.println("Expanding "+state+" (children? "+(children != null)+")");
         children = new Node[7];
         int[][] grid = Main.getGrid(state);
@@ -102,74 +115,80 @@ public class Node {
             grid[move][drop] = bot_id;
 
             String nextState = Main.state_for_grid(grid);
-//            if (children[8-move-1] != null && children[8-move-1].state.equals(nextState)) {
-//                grid[move][drop] = 0;
-//                continue;
-//            }
-//            System.err.println("\t"+nextState);
-            Node child = table.get(nextState);
-            boolean existed = child != null;
-            if (child == null) {
-                child = new Node(this, nextState, 3 - bot_id, -multiplier);
-                table.put(nextState, child);
+            if (children[8-move-1] != null && children[8-move-1].state.equals(nextState)) {
+                grid[move][drop] = 0;
+                continue;
             }
+//            System.err.println("\t"+nextState);
+            Node child = find_or_create(this, nextState, 3 - bot_id, -multiplier);
+            boolean existed = child.rollouts > 0;
             child.name = name+move;
             children[move-1] = child;
             if (!existed) {
-                child.rollouts = ROLLOUTS;
+                child.rollouts = MINOR_ROLLOUTS;
 
                 if (Main.winning_move(grid, move, drop, bot_id)) {
                     //                if (1==1) throw new RuntimeException("winning move!");
-                    System.err.println(move + " @ " + state + " is winning move for " + bot_id);
+//                    System.err.println(move + " @ " + state + " is winning move for " + bot_id);
                     child.score = 1;
                     child.terminal = true;
                 } else if (grid[1][1] != 0 && grid[2][1] != 0 && grid[3][1] != 0 && grid[4][1] != 0 && grid[5][1] != 0 && grid[6][1] != 0 && grid[7][1] != 0) {
                     child.score = 0;
                     child.terminal = true;
                 } else {
-                    child.score = Main.scoreGridParallel(bot_id, ROLLOUTS, grid);
+                    child.score = Main.scoreGrid(bot_id, MINOR_ROLLOUTS, grid);
                 }
                 if (child.score > 1 || child.score < -1) throw new RuntimeException("Distortion! " + child.score);
-                child.score = child.score * child.multiplier;
+//                child.score = child.score * child.multiplier;
+//                if (child.name.startsWith("6")) System.err.println(child.name+" scores "+child.score);
             }
 
-            sum += child.score;
+            sum += child.score*child.rollouts;
             rolls += child.rollouts;
 
-            System.err.println(child.state+" scores "+child.score+" ("+child.multiplier+")");
+//            System.err.println(child.state+" scores "+child.score+" ("+child.multiplier+")");
 
             grid[move][drop] = 0;
         }
 
-        // TODO make this one single update
-        double child_score = sum;
+        double child_score = sum/rolls;
         for(Node prev : nodes) {
             child_score = -child_score;
-            prev.rollouts += rolls;
-//            if (child.terminal) System.err.print(prev.state + " " + prev.score + " --> " + child_score);
-            prev.score = (
-                    (prev.score*prev.rollouts)+
-                            (child_score*rolls)
-            )/(prev.rollouts+rolls);
-//            if (child.terminal) System.err.println(" = "+prev.score);
+            prev.add(child_score, rolls);
         }
 //            if (child.terminal)
 
     }
 
+    private void add(double child_score, int rolls) {
+        double s = score;
+        score = ((score*rollouts)+(child_score*rolls))/(rollouts+rolls);
+        rollouts += rolls;
+//        if (name.startsWith("6")) System.err.println(name+" adjusted to "+score+" from "+s+" (child score "+child_score+")");
+    }
+
     public int getBestMove() {
         int bestMove = -1;
         int bestRollouts = 0;
+        double bestScore = 0;
+
+        double sum = 0;
+        int rolls = 0;
 
         for(int i=0; i<children.length; i++) {
             if (children[i] != null) {
+                sum += children[i].score*children[i].rollouts;
+                rolls += children[i].rollouts;
                 System.err.println(">> "+children[i].state+" has score "+children[i].score+" and rollouts "+children[i].rollouts);
-                if (bestMove == -1 || children[i].rollouts > bestRollouts) {
+                if (bestMove == -1 || children[i].rollouts > bestRollouts || (children[i].rollouts == bestRollouts && children[i].score > bestScore)) {
                     bestMove = i+1;
                     bestRollouts = children[i].rollouts;
+                    bestScore = children[i].score;
                 }
             }
         }
+
+//        System.err.println("Root "+score+" should equal "+(sum/rolls));
 
         return bestMove;
     }
@@ -184,5 +203,14 @@ public class Node {
                 }
             }
         }
+    }
+
+    public static Node find_or_create(Node parent, String state, int bot_id, int multiplier) {
+        Node child = table.get(state);
+        if (child == null) {
+            child = new Node(parent, state, bot_id, -multiplier);
+            table.put(state, child);
+        }
+        return child;
     }
 }

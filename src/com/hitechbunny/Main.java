@@ -59,7 +59,9 @@ public class Main {
                 }
                 key.append(Integer.valueOf(grid[i][j]));
             }
-            key.append(";");
+            if (j < 6) {
+                key.append(";");
+            }
         }
 
         StringBuffer alternateKey = new StringBuffer(7*6);
@@ -70,7 +72,9 @@ public class Main {
                 }
                 alternateKey.append(Integer.valueOf(grid[i][j]));
             }
-            alternateKey.append(";");
+            if (j < 6) {
+                alternateKey.append(";");
+            }
         }
 
         String encoding = key.toString();
@@ -91,7 +95,9 @@ public class Main {
                 }
                 state.append(Integer.valueOf(grid[i][j]));
             }
-            state.append(";");
+            if (j < 6) {
+                state.append(";");
+            }
         }
 
         return state.toString();
@@ -446,9 +452,11 @@ public class Main {
         if (USE_BONUS_TIMES && round <= BONUS_TIMES.length) {
             time_limit += BONUS_TIMES[round - 1];
         }
-//        time_limit = 500;
+        time_limit = 500;
 
-        Node root = new Node(null, state, our_bot_id, -1);
+        Node root = Node.find_or_create(null, state, our_bot_id, -1);
+        System.err.println(state);
+        if (root != null) System.err.println("Reusing "+root.rollouts);
 
         while(System.currentTimeMillis() - start < time_limit) {
             // select
@@ -457,12 +465,13 @@ public class Main {
             nodes.get(0).expand(nodes);
 
 //            root.getBestMove();
+//            break;
         }
 
         BufferedWriter out= new BufferedWriter(new FileWriter("mcts.dot"));
         out.append("digraph {\n");
         out.append("  rankdir=\"LR\";\n");
-        root.dump(out, 3);
+        root.dump(out, 10);
         out.append("}\n");
         out.close();
 
