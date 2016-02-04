@@ -446,7 +446,7 @@ public class Main {
         if (USE_BONUS_TIMES && round <= BONUS_TIMES.length) {
             time_limit += BONUS_TIMES[round - 1];
         }
-        time_limit = 500;
+//        time_limit = 500;
 
         Node root = new Node(null, state, our_bot_id, -1);
 
@@ -455,6 +455,8 @@ public class Main {
             List<Node> nodes = root.select();
             // expand
             nodes.get(0).expand(nodes);
+
+//            root.getBestMove();
         }
 
         BufferedWriter out= new BufferedWriter(new FileWriter("mcts.dot"));
