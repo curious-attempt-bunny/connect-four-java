@@ -452,10 +452,11 @@ public class Main {
         if (USE_BONUS_TIMES && round <= BONUS_TIMES.length) {
             time_limit += BONUS_TIMES[round - 1];
         }
-        time_limit = 500;
+        time_limit = 5*60000;
 
-        Node root = Node.find_or_create(null, state, our_bot_id, -1);
-        System.err.println(state);
+        state = getState(getGrid(state));
+        Node root = Node.find_or_create(state, our_bot_id, -1);
+        System.err.println(state+" we are player "+our_bot_id);
         if (root != null) System.err.println("Reusing "+root.rollouts);
 
         while(System.currentTimeMillis() - start < time_limit) {
@@ -471,9 +472,13 @@ public class Main {
         BufferedWriter out= new BufferedWriter(new FileWriter("mcts.dot"));
         out.append("digraph {\n");
         out.append("  rankdir=\"LR\";\n");
-        root.dump(out, 10);
+        root.dumpBest(out, 15);
         out.append("}\n");
         out.close();
+
+//        BufferedWriter out = new BufferedWriter(new FileWriter("mcts.txt"));
+//        root.record(out);
+//        out.close();
 
         return root.getBestMove();
     }

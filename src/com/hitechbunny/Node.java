@@ -12,22 +12,20 @@ import java.util.Map;
  */
 public class Node {
     private static Map<String,Node> table = new HashMap<>(100000);
-    private static final int MAJOR_ROLLOUTS = 500; //1900;
-    private static final int MINOR_ROLLOUTS = 25;
+    private static final int MAJOR_ROLLOUTS = 2000; //500;
+    private static final int MINOR_ROLLOUTS = 2000; //25;
 
     Node[] children;
     private double score;
-    private Node parent;
     private String state;
     private int bot_id;
     private int multiplier;
-    public int rollouts;
+    public long rollouts;
     private int bestMove;
     private String name;
     private boolean terminal;
 
-    public Node(Node parent, String state, int bot_id, int multiplier) {
-        this.parent = parent;
+    public Node(String state, int bot_id, int multiplier) {
         this.state = state;
         this.bot_id = bot_id;
         this.multiplier = multiplier;
@@ -40,7 +38,7 @@ public class Node {
         return select(this.rollouts, nodes);
     }
 
-    private List<Node> select(int rollouts, List<Node> nodes) {
+    private List<Node> select(long rollouts, List<Node> nodes) {
 
         if (children == null || terminal) {
 //            System.err.println("Selected "+state+" ("+multiplier+")");
@@ -92,7 +90,7 @@ public class Node {
 
         if (rollouts < MAJOR_ROLLOUTS && !name.isEmpty()) {
             int[][] grid = Main.getGrid(state);
-            double child_score = Main.scoreGrid(3 - bot_id, MAJOR_ROLLOUTS, grid);
+            double child_score = Main.scoreGridParallel(3 - bot_id, MAJOR_ROLLOUTS, grid);
 //            child_score = child_score * multiplier;
             for(Node prev : nodes) {
                 prev.add(child_score, MAJOR_ROLLOUTS);
@@ -120,7 +118,7 @@ public class Node {
                 continue;
             }
 //            System.err.println("\t"+nextState);
-            Node child = find_or_create(this, nextState, 3 - bot_id, -multiplier);
+            Node child = find_or_create(nextState, 3 - bot_id, -multiplier);
             boolean existed = child.rollouts > 0;
             child.name = name+move;
             children[move-1] = child;
@@ -136,7 +134,7 @@ public class Node {
                     child.score = 0;
                     child.terminal = true;
                 } else {
-                    child.score = Main.scoreGrid(bot_id, MINOR_ROLLOUTS, grid);
+                    child.score = Main.scoreGridParallel(bot_id, MINOR_ROLLOUTS, grid);
                 }
                 if (child.score > 1 || child.score < -1) throw new RuntimeException("Distortion! " + child.score);
 //                child.score = child.score * child.multiplier;
@@ -169,7 +167,7 @@ public class Node {
 
     public int getBestMove() {
         int bestMove = -1;
-        int bestRollouts = 0;
+        long bestRollouts = 0;
         double bestScore = 0;
 
         double sum = 0;
@@ -205,12 +203,35 @@ public class Node {
         }
     }
 
-    public static Node find_or_create(Node parent, String state, int bot_id, int multiplier) {
+    public void dumpBest(BufferedWriter out, int depth) throws IOException {
+        out.append("  \""+state+"\" [label=\""+name+" "+rollouts+" @ "+String.format("%.3g",score)+"\"];\n");
+        if (children != null) {
+            for(Node child : children) {
+                if (child != null && depth >= 1) {
+//                    child.dump(out, depth-1);
+                    out.append("  \"" + state + "\" -> \"" + child.state + "\";\n");
+                    out.append("  \""+child.state+"\" [label=\""+child.name+" "+child.rollouts+" @ "+String.format("%.3g",child.score)+"\"];\n");
+                }
+            }
+
+            int move = getBestMove();
+            if (move != -1) {
+                children[move-1].dumpBest(out, depth - 1);
+            }
+        }
+    }
+
+    public static Node find_or_create(String state, int bot_id, int multiplier) {
         Node child = table.get(state);
         if (child == null) {
-            child = new Node(parent, state, bot_id, -multiplier);
+            child = new Node(state, bot_id, -multiplier);
             table.put(state, child);
         }
         return child;
+    }
+
+    public void record(BufferedWriter out) throws IOException {
+//        out.append("  parent = Node.find_or_create(\""+state+"\","+bot_id+","+multiplier+");\n");
+//        out.append("  parent.name = ");
     }
 }
