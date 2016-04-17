@@ -11,9 +11,9 @@ import java.util.Map;
  * Created by home on 2/1/16.
  */
 public class Node {
-    private static Map<String,Node> table = new HashMap<>(100000);
-    private static final int MAJOR_ROLLOUTS = 2000; //500;
-    private static final int MINOR_ROLLOUTS = 2000; //25;
+    public static Map<String,Node> table = new HashMap<>(100000);
+    private static final int MAJOR_ROLLOUTS = 500; //20000; //500;
+    private static final int MINOR_ROLLOUTS = 25; // 20000; //25;
 
     Node[] children;
     private double score;
@@ -21,7 +21,6 @@ public class Node {
     private int bot_id;
     private int multiplier;
     public long rollouts;
-    private int bestMove;
     private String name;
     private boolean terminal;
 
@@ -48,15 +47,15 @@ public class Node {
 
         Node best = null;
         double best_weight = 0;
-        double c = Math.sqrt(2);
-//        double c = Math.sqrt(10);
+//        double c = Math.sqrt(2);
+        double c = Math.sqrt(10);
         double lnt = Math.log(rollouts);
         for(Node child : children) {
             if (child == null) {
                 continue;
             }
 //            best = child; if (1==1) break;
-            double weight = (child.multiplier*child.score+1)/2 + c*Math.sqrt(lnt / child.rollouts);
+            double weight = (child.score+1)/2 + c*Math.sqrt(lnt / child.rollouts);
 //            System.err.println("Child "+child.state+" has score "+child.score+" and weight "+weight);
 //            if (best == null || (weight > best_weight && best.multiplier*best.score < 1.0) || (child.terminal && child.multiplier*child.score == 1.0)) {
             if (best == null || weight > best_weight) {
@@ -104,7 +103,15 @@ public class Node {
         int[][] grid = Main.getGrid(state);
         double sum = 0;
         int rolls = 0;
-        for(int move=1; move<=7; move++) {
+
+        RolloutState rolloutState = new RolloutState();
+        Main.populate_selection_options(bot_id, grid, new int[7], new int[7], rolloutState, bot_id);
+
+        if (rolloutState.selectionOptionCount == 0) throw new RuntimeException("No legal moves for "+state);
+
+        for(int i=0; i<rolloutState.selectionOptionCount; i++) {
+            int move = rolloutState.selectionOptions[i];
+
             int drop = Main.getDrop(grid[move]);
             if (drop == -1) {
                 // illegal move
@@ -196,7 +203,7 @@ public class Node {
         if (children != null) {
             for(Node child : children) {
                 if (child != null && depth >= 1) {
-                    child.dump(out, depth-1);
+                    child.dump(out, depth - 1);
                     out.append("  \"" + state + "\" -> \"" + child.state + "\";\n");
                 }
             }
@@ -218,20 +225,48 @@ public class Node {
             if (move != -1) {
                 children[move-1].dumpBest(out, depth - 1);
             }
+        } else {
+            System.err.println("Best is "+name+" with result "+score*multiplier);
         }
     }
 
     public static Node find_or_create(String state, int bot_id, int multiplier) {
         Node child = table.get(state);
         if (child == null) {
-            child = new Node(state, bot_id, -multiplier);
+            child = new Node(state, bot_id, multiplier);
             table.put(state, child);
         }
         return child;
     }
 
     public void record(BufferedWriter out) throws IOException {
-//        out.append("  parent = Node.find_or_create(\""+state+"\","+bot_id+","+multiplier+");\n");
-//        out.append("  parent.name = ");
+        out.append("  parent = Node.find_or_create(\""+state+"\","+bot_id+","+multiplier+");\n");
+        out.append("  parent.score = "+score+";\n");
+        out.append("  parent.rollouts = "+rollouts+"L;\n");
+        out.append("  parent.terminal = "+terminal+";\n");
+        out.append("  parent.name = \""+name+"\";\n");
+        if (children != null) {
+            out.append("  parent.children = new Node[] {\n");
+            boolean first = true;
+            for(Node child : children) {
+                if (!first) {
+                    out.append(",\n");
+                }
+                first = false;
+                if (child == null) {
+                    out.append("    null");
+                } else {
+                    out.append("    Node.find_or_create(\""+child.state+"\","+child.bot_id+","+child.multiplier+")");
+                }
+            }
+            out.append("\n");
+            out.append("  };\n");
+            for(Node child : children) {
+                if (child != null) {
+                    child.record(out);
+                }
+            }
+        }
+
     }
 }

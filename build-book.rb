@@ -116,7 +116,14 @@ File.open('src/com/hitechbunny/Book.java', 'w') do |f|
     f << "public class Book {\n"
     f << "  public static final Map<String, Double> table = new HashMap<>(1000);\n"
     f << "\n"
+    f << "  private static void add(String state, double score) {\n"
+    f << "    Connect4 c4 = new Connect4();\n"
+    f << "    c4.parseState(state);\n"
+    f << "    table.put(c4.positioncode(), score);\n"
+    f << "  }\n"
+    f << "\n"
     f << "  static {\n"
+    f << "\n"
 
     value.to_a.sort_by(&:first).each do |i|
         k,v = i

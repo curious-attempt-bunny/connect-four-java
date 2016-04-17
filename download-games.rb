@@ -3,7 +3,7 @@
 require 'set'
 
 leaderboard = `curl http://theaigames.com/competitions/four-in-a-row/leaderboard/global/a/`
-leaders = Set.new(leaderboard.scan(/(?mi)<td class="cell-table cell-table-pointRight"><div class="bot-name">(.*?)<\/div>/)[0...10].map(&:first).map(&:strip))
+leaders = Set.new(leaderboard.scan(/(?mi)<td class="cell-table cell-table-pointRight"><div class="bot-name">(.*?)<\/div>/)[0...15].map(&:first).map(&:strip))
 
 1.upto(500) do |page|
     response = `curl http://theaigames.com/competitions/four-in-a-row/game-log/a/#{page}`
@@ -18,5 +18,5 @@ leaders = Set.new(leaderboard.scan(/(?mi)<td class="cell-table cell-table-pointR
             File.write("raw/#{game}.json", `curl #{url}`)
         end
     end
-    break if Dir.glob('raw/*.json').size >= 1000
+    break if Dir.glob('raw/*.json').size >= 2000
 end

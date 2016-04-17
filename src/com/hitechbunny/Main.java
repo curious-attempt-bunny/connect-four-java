@@ -152,12 +152,11 @@ public class Main {
         int[][] s = new int[9][8];
         int[] legal = new int[7];
         int[] avoided = new int[7];
+
         Random r = new Random();
 
-        int wins = 0;
-        int losses = 0;
-        int draws = 0;
-        
+        RolloutState rolloutState = new RolloutState();
+
         for(int rollout = 0; rollout< rollouts; rollout++) {
             for (int i = 0; i < 9; i++) {
                 for (j = 0; j < 8; j++) {
@@ -167,90 +166,8 @@ public class Main {
             int bot_id = 3-our_bot_id;
 
             while(true) {
-                int legals = 0;
-                int avoideds = 0;
-                boolean done = false;
-                boolean skipped_losses = false;
-                Integer defensive_move = null;
-                Integer forcePlay = null;
-                Integer avoidPlay = null;
-
-                for (int i = 1; i <= 7; i++) {
-                    drop = getDrop(s[i]);
-//                    System.err.println("Considering "+i+" with drop "+drop);
-                    if (drop != -1) {
-                        legal[legals++] = i;
-
-                        if (winning_move(s, i, drop, bot_id)) {
-                            // we win
-                            if (our_bot_id == bot_id) {
-                                wins++;
-                            } else {
-                                losses++;
-                            }
-                            done = true;
-                            break;
-                        } else if (winning_move(s, i, drop, 3-bot_id)) {
-                            // we block them winning
-                            defensive_move = i;
-                        } else if (drop>1 && winning_move(s, i, drop-1, 3-bot_id)) {
-                            // we avoid letting them win directly
-                            legals--;
-                            skipped_losses = true;
-//                            System.err.println("Skipped loss at "+i);
-                        } else {
-                            boolean canWinNext = (drop>1 && winning_move(s, i, drop-1, bot_id));
-                            boolean canWinAfter = (drop>2 && winning_move(s, i, drop-2, bot_id));
-
-                            if (canWinNext && canWinAfter) {
-                                forcePlay = i;
-                            } else if (canWinNext && !canWinAfter) {
-                                avoidPlay = i;
-                                avoided[avoideds++] = i;
-                                legals--;
-                            }
-                        }
-                    }
-                }
-                if (done) {
-                    // a winning move was available
-                    break;
-                }
-
-                int selected;
-
-                if (legals == 0 && avoidPlay != null) {
-                    // no moves we want to make, just moves that would eliminate a winning move for us
-                    selected = avoided[r.nextInt(avoideds)];;
-                } else {
-                    if (legals == 0 && skipped_losses) {
-                        // no moves we want to make, just ones that let them win next turn
-                        if (our_bot_id == bot_id) {
-                            losses++;
-                        } else {
-                            wins++;
-                        }
-                        done = true;
-                        break;
-                    }
-
-                    if (legals == 0) {
-                        // no moves at all to make
-                        draws++;
-                        break;
-                    }
-
-                    if (defensive_move != null) {
-                        // a move to stop them from winning directly
-                        selected = defensive_move;
-                    } else if (forcePlay != null) {
-                        // a move that forces them to lose
-                        selected = forcePlay;
-                    } else {
-                        // just regular moves
-                        selected = legal[r.nextInt(legals)];
-                    }
-                }
+                if (populate_selection_options(our_bot_id, s, legal, avoided, rolloutState, bot_id)) break;
+                int selected = rolloutState.selectionOptions[r.nextInt(rolloutState.selectionOptionCount)];
 
                 drop = getDrop(s[selected]);
                 s[selected][drop] = bot_id;
@@ -259,11 +176,113 @@ public class Main {
             }
         }
 
-        double sum = (double)(wins - losses)/rollouts;
+        double sum = (double)(rolloutState.wins - rolloutState.losses)/rollouts;
 
 //        System.err.println("Move "+move+" sum: "+sum+" wins: "+wins+" losses "+losses+" draws "+draws);
 
         return sum;
+    }
+
+    public static boolean populate_selection_options(int our_bot_id, int[][] s, int[] legal, int[] avoided, RolloutState rolloutState, int bot_id) {
+        int drop;
+        int legals = 0;
+        int avoideds = 0;
+        boolean skipped_losses = false;
+        Integer defensive_move = null;
+        Integer forcePlay = null;
+        Integer avoidPlay = null;
+        rolloutState.done = false;
+        rolloutState.selectionOptionCount = 0;
+
+        for (int i = 1; i <= 7; i++) {
+            drop = getDrop(s[i]);
+//                    System.err.println("Considering "+i+" with drop "+drop);
+            if (drop != -1) {
+                legal[legals++] = i;
+
+                if (winning_move(s, i, drop, bot_id)) {
+                    // we win
+                    if (our_bot_id == bot_id) {
+                        rolloutState.wins++;
+                    } else {
+                        rolloutState.losses++;
+                    }
+                    rolloutState.selectionOptions[0] = i;
+                    rolloutState.selectionOptionCount = 1;
+
+                    rolloutState.done = true;
+                    break;
+//                } else if (winning_move(s, i, drop, 3-bot_id)) {
+//                    // we block them winning
+//                    defensive_move = i;
+//                } else if (drop>1 && winning_move(s, i, drop-1, 3-bot_id)) {
+//                    // we avoid letting them win directly
+//                    legals--;
+//                    skipped_losses = true;
+//
+//                    rolloutState.selectionOptions[0] = i;
+//                    rolloutState.selectionOptionCount = 1;
+//
+////                            System.err.println("Skipped loss at "+i);
+//                } else {
+//                    boolean canWinNext = (drop>1 && winning_move(s, i, drop-1, bot_id));
+//                    boolean canWinAfter = (drop>2 && winning_move(s, i, drop-2, bot_id));
+//
+//                    if (canWinNext && canWinAfter) {
+//                        forcePlay = i;
+//                    } else if (canWinNext && !canWinAfter) {
+//                        avoidPlay = i;
+//                        avoided[avoideds++] = i;
+//                        legals--;
+//                    }
+                }
+            }
+        }
+        if (rolloutState.done) {
+            // a winning move was available
+            return true;
+        }
+
+        if (legals == 0 && avoidPlay != null) {
+            // no moves we want to make, just moves that would eliminate a winning move for us
+            rolloutState.selectionOptions = avoided;
+            rolloutState.selectionOptionCount = avoideds;
+//                    selected = avoided[r.nextInt(avoideds)];
+        } else {
+            if (legals == 0 && skipped_losses) {
+                // no moves we want to make, just ones that let them win next turn
+                if (our_bot_id == bot_id) {
+                    rolloutState.losses++;
+                } else {
+                    rolloutState.wins++;
+                }
+                return true;
+            }
+
+            if (legals == 0) {
+                // no moves at all to make
+                rolloutState.draws++;
+                return true;
+            }
+
+            if (defensive_move != null) {
+                // a move to stop them from winning directly
+//                        selected = defensive_move;
+                rolloutState.selectionOptions[0] = defensive_move;
+                rolloutState.selectionOptionCount = 1;
+            } else if (forcePlay != null) {
+                // a move that forces them to lose
+//                        selected = forcePlay;
+                rolloutState.selectionOptions[0] = forcePlay;
+                rolloutState.selectionOptionCount = 1;
+            } else {
+                // just regular moves
+//                        selected = legal[r.nextInt(legals)];
+                rolloutState.selectionOptions = legal;
+                rolloutState.selectionOptionCount = legals;
+            }
+        }
+        return false;
     }
 
     public static int[][] getGrid(String state) {
@@ -452,14 +471,15 @@ public class Main {
         if (USE_BONUS_TIMES && round <= BONUS_TIMES.length) {
             time_limit += BONUS_TIMES[round - 1];
         }
-        time_limit = 5*60000;
+//        time_limit = 60000;
+        time_limit = 500;
 
         state = getState(getGrid(state));
         Node root = Node.find_or_create(state, our_bot_id, -1);
         System.err.println(state+" we are player "+our_bot_id);
         if (root != null) System.err.println("Reusing "+root.rollouts);
 
-        while(System.currentTimeMillis() - start < time_limit) {
+        while(System.currentTimeMillis() - start < time_limit) { // && Node.table.size() < 1000) {
             // select
             List<Node> nodes = root.select();
             // expand
@@ -469,14 +489,14 @@ public class Main {
 //            break;
         }
 
-        BufferedWriter out= new BufferedWriter(new FileWriter("mcts.dot"));
-        out.append("digraph {\n");
-        out.append("  rankdir=\"LR\";\n");
-        root.dumpBest(out, 15);
-        out.append("}\n");
-        out.close();
-
-//        BufferedWriter out = new BufferedWriter(new FileWriter("mcts.txt"));
+//        BufferedWriter out = new BufferedWriter(new FileWriter("mcts.dot"));
+//        out.append("digraph {\n");
+//        out.append("  rankdir=\"LR\";\n");
+//        root.dumpBest(out, 15);
+//        out.append("}\n");
+//        out.close();
+//
+//        out = new BufferedWriter(new FileWriter("mcts.txt"));
 //        root.record(out);
 //        out.close();
 
