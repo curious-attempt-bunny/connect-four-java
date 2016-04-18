@@ -1,0 +1,1 @@
+`cd src && zip -r ../bot-#{Time.now.to_s.gsub(/[: ]/,'-')}.zip com`

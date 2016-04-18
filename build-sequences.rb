@@ -178,6 +178,14 @@ class Node
             child.walk(player)
         end
     end
+
+    def remove(moves)
+        if moves.size == 1
+            @children.delete(moves)
+        else
+            @children[moves[0]].delete(moves[1..-1])
+        end
+    end
 end
 
 require 'json'
@@ -212,5 +220,6 @@ File.read("tree.txt").lines.each do |line|
     tree.add(moves, lookup)
 end
 
+tree.remove("1")
 tree.walk(1)
 tree.walk(2)
