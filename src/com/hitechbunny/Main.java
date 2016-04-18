@@ -454,6 +454,21 @@ public class Main {
                     } else {
                         moves += move;
                     }
+                } else if (state == null && moves != null) {
+                    int[][] newGrid = getGrid(newState);
+
+                    Integer move = null;
+                    for (int i = 0; i < 9; i++) {
+                        for (int j = 0; j < 8; j++) {
+                            if (newGrid[i][j] > 0) {
+                                move = i;
+                            }
+                        }
+                    }
+
+                    if (move != null) {
+                        moves += move;
+                    }
                 }
 
                 state = newState;
