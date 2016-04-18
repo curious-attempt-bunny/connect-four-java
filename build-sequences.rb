@@ -175,6 +175,7 @@ class Node
         end
 
         display.each do |child|
+            # puts "Considering #{child.name}"
             child.walk(player)
         end
     end
@@ -182,8 +183,8 @@ class Node
     def remove(moves)
         if moves.size == 1
             @children.delete(moves)
-        else
-            @children[moves[0]].delete(moves[1..-1])
+        elsif @children.has_key?(moves[0])
+            @children[moves[0]].remove(moves[1..-1])
         end
     end
 end
@@ -222,4 +223,8 @@ end
 
 tree.remove("1")
 tree.walk(1)
+tree.remove("41")
+tree.remove("42")
+tree.remove("46")
+tree.remove("47")
 tree.walk(2)

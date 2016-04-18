@@ -8,3 +8,4 @@ ruby build-sequences.rb > sequences.txt
 cat sequences.txt
 ruby inline-sequences.rb
 ruby prepare-zip.rb
+git add raw
