@@ -1,4 +1,5 @@
 require 'json'
+require './common'
 
 def player_move(state1, state2)
     s1 = state1.gsub(/[;,]/,'')
@@ -14,6 +15,14 @@ def player_move(state1, state2)
     (i%7)+1
 end
 
+def finished?(name, states)
+    return true if name.size == 6*7
+    prior = states[-2]
+    move = player_move(states[-2], states[-1])
+
+    winning_move?(prior, (states.size % 2)+1, move)
+end
+
 Dir.glob('raw/*.json').each do |file|
     raw = File.read(file)
     next if raw.strip == ''
@@ -23,6 +32,7 @@ Dir.glob('raw/*.json').each do |file|
 
     winner = json['settings']['winnerplayer']
     states = json['states'].map { |s| s['field'] }
+
     score = winner == 'none' ? 0.5 : (winner == 'player1' ? 1 : 0)
     name = ""
     # states = states[0...7]
@@ -38,6 +48,11 @@ Dir.glob('raw/*.json').each do |file|
     puts "#{name},#{score},#{json['meta']['scores'][0]},#{json['meta']['scores'][1]}"
     #puts json
     #exit(0)
+
+    # unless finished?(name, states)
+    #     puts "*** Unfinished game #{file}"
+    #     next
+    # end    
 end
 
 #links.each do |n1, nodes|

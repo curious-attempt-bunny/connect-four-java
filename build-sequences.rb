@@ -66,7 +66,7 @@ class Node
         best = display[0]
         display.each do |child|
             if child.score(player) > best.score(player) || (!best_selection.include?(best) && best_selection.include?(child))
-                best = child 
+                best = child
             end
             # puts "  \"#{child.name}\" [label=\"#{child.name} #{'%.2g' % child.score(player)} #{child.lookups.size}\"];"
         end
@@ -94,9 +94,9 @@ class Node
             win = @outcomes[0.0]
             loss = @outcomes[1.0]
         end
-        
+
         # puts "  Raw outcomes: win #{win.size}, draw: #{draw.size}, loss: #{loss.size}"
-        
+
         score_win = win.map { |lookup| lookup.player2_score }.inject(0, &:+)
         score_draw = draw.map { |lookup| lookup.player2_score }.inject(0, &:+)
         score_loss = loss.map { |lookup| lookup.player1_score }.inject(0, &:+)
@@ -126,6 +126,56 @@ class Node
             'lose'
         else
             'draw'
+        end
+    end
+
+    def walk(player)
+        if @children.values.empty?
+            puts "add(#{player}, \"#{name}\");"
+            return
+        end
+
+        display = @children.values
+
+        winners = []
+        draws = []
+        losers = []
+
+        display.each do |child|
+            if @scores.has_key?(child.name)
+                if @scores[child.name] == 1
+                    losers << child
+                elsif @scores[child.name] == 0
+                    winners << child
+                else
+                    draws << child
+                end
+            end
+        end
+
+        best_selection = display
+        if winners.size > 0
+            best_selection = winners
+        elsif draws.size > 0
+            best_selection = draws
+        else
+            best_selection = losers
+        end
+
+        best = display[0]
+        display.each do |child|
+            if child.score(player) > best.score(player) || (!best_selection.include?(best) && best_selection.include?(child))
+                best = child
+            end
+            # puts "  \"#{child.name}\" [label=\"#{child.name} #{'%.2g' % child.score(player)} #{child.lookups.size}\"];"
+        end
+
+        if (name.size % 2)+1 == player
+            display = [best]
+        end
+
+        display.each do |child|
+            child.walk(player)
         end
     end
 end
@@ -162,9 +212,5 @@ File.read("tree.txt").lines.each do |line|
     tree.add(moves, lookup)
 end
 
-puts "digraph {"
-puts "  rankdir=\"LR\";"
-puts
-tree.dump(1, 100)
-puts "}"
-# tree.dump(2)
+tree.walk(1)
+tree.walk(2)

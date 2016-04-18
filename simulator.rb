@@ -5,15 +5,15 @@ require './common'
 
 #JAVA_BOT = "java -cp /Users/home/IdeaProjects/connect-four-java/out/production/connect-four-java com.hitechbunny.Main"
 JAVA_BOT = "java -cp bot-montecarlo-v11.jar com.hitechbunny.Main"
-JAVA_OTHER_BOT = "java -cp bot-montecarlo-v11.jar com.hitechbunny.Main"
+JAVA_OTHER_BOT = "java -cp /Users/home/IdeaProjects/connect-four-java/out/production/connect-four-java com.hitechbunny.Main"
 
 wins = {1 => 0, 2 => 0}
 RUNS=25
-1.upto(RUNS) do
+1.upto(RUNS) do |run|
 Open3.popen2(JAVA_BOT) do |o1,i1,t1|
 # Open3.popen3(JAVA_BOT) do |o1,i1,e1,t1|
-  Open3.popen3(JAVA_OTHER_BOT) do |o2,i2,e2,t2|
-  # Open3.popen2(JAVA_OTHER_BOT) do |o2,i2,t2|
+  # Open3.popen3(JAVA_OTHER_BOT) do |o2,i2,e2,t2|
+  Open3.popen2(JAVA_OTHER_BOT) do |o2,i2,t2|
     state = "0,0,0,0,0,0,0;0,0,0,0,0,0,0;0,0,0,0,0,0,0;0,0,0,0,0,0,0;0,0,0,0,0,0,0;0,0,0,0,0,0,0"
 
     output = {1 => o1, 2 => o2}
@@ -33,7 +33,7 @@ settings field_rows 6
     output[2].puts "settings your_botid 2\n"
     output[2].flush
 
-    player = 1
+    player = run%2 + 1
 
     while(true) do
       puts display(state)
@@ -46,7 +46,8 @@ settings field_rows 6
 
       msg = "update game field #{state}"
       # puts ">#{player}> #{msg}"
-      output[player].puts "#{msg}\n"
+      output[1].puts "#{msg}\n"
+      output[2].puts "#{msg}\n"
       msg = "action move 10000"
       # puts ">#{player}> #{msg}"
       output[player].puts "#{msg}\n"

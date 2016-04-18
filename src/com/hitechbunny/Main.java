@@ -421,6 +421,8 @@ public class Main {
         String state = null;
         int round = 0;
 
+        String moves = "";
+
         while(true) {
             String line = in.readLine();
             if (line == null || line.equals("end")) {
@@ -429,12 +431,45 @@ public class Main {
 
             if (line.startsWith("settings your_botid ")) {
                 our_bot_id = Integer.parseInt(line.split(" ")[2]);
+                moves = "";
             } else if (line.startsWith("update game field ")) {
-                state = line.split(" ")[3];
+                String newState = line.split(" ")[3];
+
+                if (state != null && moves != null) {
+                    int[][] grid = getGrid(state);
+                    int[][] newGrid = getGrid(newState);
+
+                    Integer move = null;
+                    for (int i = 0; i < 9; i++) {
+                        for (int j = 0; j < 8; j++) {
+                            if (grid[i][j] != newGrid[i][j]) {
+                                move = i;
+                            }
+                        }
+                    }
+
+                    if (move == null) {
+                        System.err.println("Could not track move in "+newState);
+                        moves = null;
+                    } else {
+                        moves += move;
+                    }
+                }
+
+                state = newState;
             } else if (line.startsWith("action move ")) {
                 round++;
                 long start_time = System.currentTimeMillis();
-                int move = generate_move(state, round, our_bot_id);
+                Integer move = null;
+                if (moves != null) {
+                    int player = (moves.length() % 2) + 1;
+                    System.err.print("Looking up for player "+player+" for state "+moves+" --> ");
+                    move = Opening.getMove(player, moves);
+                    System.err.println(move);
+                }
+                if (move == null) {
+                    move = generate_move(state, round, our_bot_id);
+                }
                 System.out.println("place_disc "+(move-1));
                 System.err.println("Time: "+(System.currentTimeMillis()-start_time));
             }
