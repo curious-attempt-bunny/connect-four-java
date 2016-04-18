@@ -1,9 +1,12 @@
 #!/usr/bin/env ruby
 
 require 'set'
+require 'json'
 
 leaderboard = `curl http://theaigames.com/competitions/four-in-a-row/leaderboard/global/a/`
-leaders = Set.new(leaderboard.scan(/(?mi)<td class="cell-table cell-table-pointRight"><div class="bot-name">(.*?)<\/div>/)[0...10].map(&:first).map(&:strip))
+leaders = Set.new(leaderboard.scan(/(?mi)<td class="cell-table cell-table-pointRight"><div class="bot-name">(.*?)<\/div>/)[0...15].map(&:first).map(&:strip))
+points = Set.new(leaderboard.scan(/(?mi)<td class="cell-table cell-table-square"><em>([0-9]+)<\/em>/)[0...15].map(&:first).map(&:strip)).map(&:to_i)
+leader_points = Hash[leaders.zip(points)]
 
 1.upto(500) do |page|
     response = `curl http://theaigames.com/competitions/four-in-a-row/game-log/a/#{page}`
@@ -15,8 +18,15 @@ leaders = Set.new(leaderboard.scan(/(?mi)<td class="cell-table cell-table-pointR
         puts players
         puts url
         unless File.exists?("raw/#{game}.json")
-            File.write("raw/#{game}.json", `curl #{url}`)
+            content = `curl #{url}`
+            json = JSON.parse(content)
+            json["meta"] = {
+                players: players,
+                scores: players.map { |p| leader_points[p] }
+            }
+            content = JSON.generate(json)
+            File.write("raw/#{game}.json", content)
         end
     end
-    break if Dir.glob('raw/*.json').size >= 1000
+    break if Dir.glob('raw/*.json').size >= 5000
 end
