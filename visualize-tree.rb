@@ -128,6 +128,14 @@ class Node
             'draw'
         end
     end
+
+    def remove(moves)
+        if moves.size == 1
+            @children.delete(moves)
+        elsif @children.has_key?(moves[0])
+            @children[moves[0]].remove(moves[1..-1])
+        end
+    end
 end
 
 require 'json'
@@ -162,9 +170,16 @@ File.read("tree.txt").lines.each do |line|
     tree.add(moves, lookup)
 end
 
+tree.remove("41")
+tree.remove("42")
+tree.remove("43")
+tree.remove("45")
+tree.remove("46")
+tree.remove("47")
+
 puts "digraph {"
 puts "  rankdir=\"LR\";"
 puts
-tree.dump(1, 100)
+tree.dump(2, 100)
 puts "}"
 # tree.dump(2)

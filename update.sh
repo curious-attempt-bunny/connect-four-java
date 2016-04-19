@@ -10,3 +10,4 @@ ruby inline-sequences.rb
 ruby prepare-zip.rb
 git add raw
 git diff src
+ruby upload.rb
