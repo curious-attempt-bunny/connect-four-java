@@ -11,3 +11,5 @@ ruby prepare-zip.rb
 git add raw
 git diff src
 ruby upload.rb
+git commit -am 'Opening tweaks'
+git push origin master
