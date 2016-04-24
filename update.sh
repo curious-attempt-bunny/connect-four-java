@@ -7,8 +7,8 @@ ruby scrape-perfect.rb
 ruby build-sequences.rb > sequences.txt
 cat sequences.txt
 ruby inline-sequences.rb
-ruby prepare-zip.rb
 git add raw
+ruby prepare-zip.rb
 git diff src
 ruby upload.rb
 git commit -am 'Opening tweaks'
