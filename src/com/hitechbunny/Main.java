@@ -480,6 +480,16 @@ public class Main {
                     int player = (moves.length() % 2) + 1;
                     System.err.print("Looking up for player "+player+" for state "+moves+" --> ");
                     move = Opening.getMove(player, moves);
+
+                    if (move == null) {
+                        String mirrorMoves = "";
+                        for(int i=0; i<moves.length(); i++) {
+                            mirrorMoves += Integer.toString(8 - Integer.parseInt(moves.substring(i,i+1)));
+                        }
+                        System.err.print("Looking up mirror for player "+player+" for state "+mirrorMoves+" --> ");
+                        move = Opening.getMove(player, mirrorMoves);
+                    }
+
                     System.err.println(move);
                 }
                 if (move == null) {
