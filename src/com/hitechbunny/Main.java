@@ -409,7 +409,74 @@ public class Main {
 
     public static void main(String[] args) throws Exception {
         System.err.println("Cores: "+ Runtime.getRuntime().availableProcessors());
-        compete();
+        if (args.length == 0 || !args[0].equals("eval")) {
+            compete();
+        } else {
+            evalulate();
+        }
+    }
+
+    private static void evalulate() throws IOException {
+        BufferedReader in = new BufferedReader(new InputStreamReader(System.in));
+
+        while(true) {
+            String state = in.readLine();
+
+            if (state == null) break;
+            if (state.trim().length() == 0) continue;
+
+            int[][] grid = getGrid(state);
+
+            boolean draw = true;
+            Integer winner = null;
+
+            for(int x=0; x<grid.length; x++) {
+                for(int y=0; y<grid[x].length; y++) {
+                    if (grid[x][y] > 0) {
+                        int player = grid[x][y];
+                        grid[x][y] = 0;
+
+                        if (winning_move(grid, x, y, player)) {
+                            winner = player;
+                        }
+
+                        grid[x][y] = player;
+                    } else if (grid[x][y] == 0) {
+                        draw = false;
+                    }
+                }
+            }
+
+            int bot_id = 2;
+
+            for (int x = 0; x < grid.length; x++) {
+                for (int y = 0; y < grid[x].length; y++) {
+                    if (grid[x][y] > 0) {
+                        bot_id = 3 - bot_id;
+                    }
+                }
+            }
+
+            double score;
+
+            if (draw) {
+                score = 0.0;
+            } else if (winner != null) {
+                if (winner == 1) {
+                    score = 1.0;
+                } else {
+                    score = -1.0;
+                }
+            } else {
+                score = scoreGridParallel(bot_id, 2500, grid);
+
+                if (bot_id == 2) {
+                    score = -score;
+                }
+            }
+
+            System.out.println(state+","+score);
+        }
     }
 
     private static void compete() throws IOException {
