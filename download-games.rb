@@ -8,7 +8,7 @@ leaders = Set.new(leaderboard.scan(/(?mi)<td class="cell-table cell-table-pointR
 points = Set.new(leaderboard.scan(/(?mi)<td class="cell-table cell-table-square"><em>([0-9]+)<\/em>/)[0...15].map(&:first).map(&:strip)).map(&:to_i)
 leader_points = Hash[leaders.zip(points)]
 
-1.upto(25) do |page|
+1.upto(1000) do |page|
     response = `curl http://theaigames.com/competitions/four-in-a-row/game-log/a/#{page}`
     response.scan(/(?mi)<div class="div-botName-gameLog">(.*?)<\/div>.*?<div class="div-botName-gameLog">(.*?)<\/div>.*?href="[^"]+\/games\/([0-9a-f]+)"/).each do |match|
         players = [match[0].strip, match[1].strip]
@@ -30,5 +30,5 @@ leader_points = Hash[leaders.zip(points)]
             File.write("raw/#{game}.json", content)
         end
     end
-    break if Dir.glob('raw/*.json').size >= 5000
+    # break if Dir.glob('raw/*.json').size >= 5000
 end

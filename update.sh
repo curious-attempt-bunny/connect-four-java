@@ -9,7 +9,7 @@ cat sequences.txt
 ruby inline-sequences.rb
 git add raw
 ruby prepare-zip.rb
-git diff src
+# git diff src
 ruby upload.rb
 git commit -am 'Opening tweaks'
 git push origin master
